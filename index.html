@@ -99,7 +99,7 @@
       <section class="section" id="redactor" aria-labelledby="redactor-title">
         <div class="section-head">
           <h2 id="redactor-title">Shred your agent's logs before a human reads them.</h2>
-          <p>Paste a log, transcript or scratchpad. We strip emails, API keys, bearer tokens, wallet addresses, private keys, card numbers, IPs and home-folder usernames. It runs in this tab. Nothing is uploaded, stored or sent anywhere.</p>
+          <p>Paste a log, transcript or scratchpad. We strip emails, API keys, bearer tokens, wallet addresses, private keys, card numbers, IPs and macOS/Linux home-folder usernames. It runs in this tab. Nothing is uploaded, stored or sent anywhere.</p>
         </div>
         <div class="window redactor">
           <div class="titlebar"><span>redact.exe <span class="tag tag-live">LIVE</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
@@ -211,7 +211,7 @@
           </details>
           <details>
             <summary>Will it catch everything?</summary>
-            <p>No. It catches well-shaped things: emails, common API key formats, bearer tokens, EVM and Zcash addresses, hex private keys, PEM keys, Luhn-valid card numbers, IPv4 addresses and home-folder usernames. It will miss names, addresses and anything that looks like ordinary words.</p>
+            <p>No. It catches well-shaped things: emails, common API key formats, bearer tokens, EVM and Zcash addresses, hex private keys, PEM keys, Luhn-valid card numbers, IPv4 addresses and home-folder usernames in macOS and Linux paths. It does not catch Windows paths, and it will miss names, addresses and anything that looks like ordinary words.</p>
           </details>
           <details>
             <summary>Is the paid privacy relay live?</summary>

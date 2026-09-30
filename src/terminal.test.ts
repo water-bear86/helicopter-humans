@@ -18,6 +18,10 @@ describe('runCommand', () => {
 
   it('is honest about payments', () => {
     expect(runCommand('pay', INITIAL_STATE).lines[0]).toMatch(/not live/)
+    const status = runCommand('status', INITIAL_STATE).lines.join('\n')
+    expect(status).toMatch(/ZEC/)
+    expect(status).toMatch(/OFF\s+payment collection/)
+    expect(status).not.toMatch(/x402/)
   })
 
   it('handles unknown and empty input', () => {

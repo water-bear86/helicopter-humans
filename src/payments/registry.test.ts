@@ -12,7 +12,7 @@ describe('payment registry', () => {
     const adapter = getAdapter('disabled')
     await expect(adapter.quote({ productId: 'founding-pass' })).rejects.toBeInstanceOf(PaymentsUnavailableError)
     const quote = {
-      quoteId: 'q1', productId: 'founding-pass', amount: '5', fee: '0',
+      quoteId: 'q1', productId: 'founding-pass', amount: '5', adapterFee: '0', networkFeeIncluded: false,
       asset: 'USDC', network: 'none', payTo: 'none', expiresAt: new Date(0).toISOString(),
     }
     expect(await adapter.settle(quote, 'proof')).toMatchObject({ status: 'failed', retryable: false })

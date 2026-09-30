@@ -31,6 +31,21 @@ test('terminal works from the keyboard: shut the door, then peeking is denied', 
   await expect(input).toHaveValue('peek')
 })
 
+test('terminal status matches the disabled ZEC prototype', async ({ page }) => {
+  const input = page.getByLabel('agent@bedroom:~$')
+  await input.fill('status')
+  await input.press('Enter')
+  const log = page.getByRole('log')
+  await expect(log).toContainText('direct shielded ZEC payment check')
+  await expect(log).toContainText('payment collection (no quote, no address, no charge)')
+  await expect(log).not.toContainText('x402')
+})
+
+test('redactor copy does not claim Windows path coverage', async ({ page }) => {
+  await expect(page.locator('#redactor')).toContainText('macOS/Linux home-folder usernames')
+  await expect(page.getByText('It does not catch Windows paths')).toBeAttached()
+})
+
 test('checkout is visibly unavailable when not configured and does not navigate', async ({ page }) => {
   const checkout = page.locator('#checkout-btn')
   await expect(checkout).toHaveAttribute('aria-disabled', 'true')

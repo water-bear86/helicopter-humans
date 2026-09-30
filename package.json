@@ -8,9 +8,10 @@
     "preview": "vite preview",
     "typecheck": "tsc",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:packages",
     "test:e2e": "playwright test",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "test:packages": "npm test --workspaces --if-present"
   },
   "repository": {
     "type": "git",
@@ -21,6 +22,12 @@
     "url": "https://github.com/water-bear86/helicopter-humans/issues"
   },
   "homepage": "https://github.com/water-bear86/helicopter-humans#readme",
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "@helicopter-humans/payment-adapter": "0.1.0"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
@@ -34,6 +41,6 @@
   },
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

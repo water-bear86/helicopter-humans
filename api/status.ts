@@ -7,7 +7,13 @@ export function GET(): Response {
     {
       service: 'helicopter-humans',
       redactor: 'live-client-side',
-      payments: { adapter: adapter.id, mode: adapter.mode, privacyNote: adapter.privacyNote },
+      payments: {
+        adapter: adapter.id,
+        mode: adapter.mode,
+        collecting: adapter.mode === 'live',
+        blockers: adapter.blockers ?? [],
+        privacyNote: adapter.privacyNote,
+      },
     },
     { headers: { 'cache-control': 'no-store' } },
   )

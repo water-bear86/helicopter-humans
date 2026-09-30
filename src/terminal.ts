@@ -57,7 +57,8 @@ export function runCommand(raw: string, state: TerminalState): TerminalResult {
         lines: [
           'LIVE      log redactor (runs in your browser, sends nothing)',
           'DEMO      this terminal (theatre, not a security tool)',
-          'NOT BUILT paid privacy relay (x402 / Zcash route under investigation)',
+          'PROTOTYPE direct shielded ZEC payment check (tested offline only)',
+          'OFF       payment collection (no quote, no address, no charge)',
         ],
         state,
       }
