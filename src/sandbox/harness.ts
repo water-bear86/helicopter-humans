@@ -112,11 +112,18 @@ export async function createTestnetOrder(deps: HarnessDeps): Promise<{ evidence:
   return { evidence: evidence(view), uri: view.payment?.uri ?? null }
 }
 
-export async function refreshTestnetOrder(deps: HarnessDeps): Promise<Evidence> {
+// Loads the order the file names from the store and refuses it unless it is a sandbox testnet order.
+// Reads the store only; never contacts the provider. Returns the recovery code.
+export async function loadSandboxOrder(deps: HarnessDeps): Promise<string> {
   const code = readOrderFile(deps.orderFile)
   const snapshot = await deps.store.findByCredentialHash(hashRecoveryCode(code))
   if (!snapshot) throw new SandboxRefusal('order not found in the sandbox database')
   checkSandboxOrder(snapshot)
+  return code
+}
+
+export async function refreshTestnetOrder(deps: HarnessDeps): Promise<Evidence> {
+  const code = await loadSandboxOrder(deps)
   return evidence(await service(deps).refresh(code))
 }
 
@@ -132,7 +139,8 @@ export async function refreshTestnetOrder(deps: HarnessDeps): Promise<Evidence> 
 // Structure (ZIP 225): every Orchard action field has its exact encoded width (encCiphertext 580
 // bytes, outCiphertext 80, spendAuthSig 64, the rest 32), and a bundle with actions carries its
 // anchor (32), proof (2720 + 2272 per action) and bindingSig (64). Every balance representation that
-// is present (ZEC and zatoshi) must be well formed and agree. A Sapling balance absent in both forms
+// is present (ZEC and zatoshi) must denote an exact zatoshi amount, never rounded, and the two must
+// agree. A Sapling balance absent in both forms
 // is zero, as the v5 encoding omits valueBalanceSapling when there are no Sapling spends or outputs.
 //
 // Contradictory or malformed data fails. Incomplete data (a required field absent) and a transaction
@@ -152,6 +160,17 @@ const ACTION_BYTES = { cv: 32, nullifier: 32, rk: 32, cmx: 32, ephemeralKey: 32,
 const ORCHARD_PROOF_BYTES = (actions: number) => 2720 + 2272 * actions
 const MAX_ZAT = 21_000_000 * 1e8
 
+// The zatoshi amount a JSON ZEC number denotes, or undefined if it denotes none. A decimal with at
+// most eight places, in any notation (0.0001, 1e-4), parses to the double nearest n / 10^8, which is
+// exactly what n / 1e8 computes; below MAX_ZAT neighbouring amounts are distinct doubles. So the
+// candidate n is exact only if n / 1e8 reproduces the input: 0.000000004 or 0.000100004 do not.
+function exactZatoshis(zec: unknown): number | undefined {
+  if (typeof zec !== 'number' || !Number.isFinite(zec) || Math.abs(zec) > MAX_ZAT / 1e8) return undefined
+  const zat = Math.round(zec * 1e8)
+  if (zat / 1e8 !== zec) return undefined
+  return zat === 0 ? 0 : zat
+}
+
 export function checkShieldedTransaction(tx: unknown): ShieldedCheck {
   const failures: string[] = []
   const gaps: string[] = []
@@ -167,20 +186,25 @@ export function checkShieldedTransaction(tx: unknown): ShieldedCheck {
     else if (typeof v !== 'string' || !HEX.test(v) || v.length !== bytes * 2) failures.push(`${name} is not ${bytes} bytes of hex`)
   }
   // Checks the present ZEC and zatoshi forms of one balance; returns the zatoshi value if known.
+  // Nothing is rounded: each present form must denote an exact zatoshi amount, and both must agree.
   const balance = (zec: unknown, zat: unknown, name: string): number | undefined => {
     if (zat !== undefined && (typeof zat !== 'number' || !Number.isSafeInteger(zat) || Math.abs(zat) > MAX_ZAT)) {
       failures.push(`${name} valueBalanceZat malformed`)
       return undefined
     }
-    if (zec !== undefined && (typeof zec !== 'number' || !Number.isFinite(zec) || Math.abs(zec) > MAX_ZAT / 1e8)) {
-      failures.push(`${name} valueBalance malformed`)
-      return undefined
+    let fromZec: number | undefined
+    if (zec !== undefined) {
+      fromZec = exactZatoshis(zec)
+      if (fromZec === undefined) {
+        failures.push(`${name} valueBalance is not an exact zatoshi amount`)
+        return undefined
+      }
     }
-    if (zat !== undefined && zec !== undefined && Math.round((zec as number) * 1e8) !== zat) {
+    if (zat !== undefined && fromZec !== undefined && fromZec !== zat) {
       failures.push(`${name} valueBalance disagrees with valueBalanceZat`)
       return undefined
     }
-    return (zat as number | undefined) ?? (zec === undefined ? undefined : Math.round((zec as number) * 1e8))
+    return (zat as number | undefined) ?? fromZec
   }
 
   if (!isObject(tx)) return { fullyShielded: false, verdict: 'fail', reasons: ['not a transaction object'] }

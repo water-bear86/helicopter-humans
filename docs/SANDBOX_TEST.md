@@ -45,7 +45,7 @@ Server-side, local only. Put these in `.env.sandbox` (gitignored, read by `npm r
 npm run sandbox -- preflight              # read-only; exit 0 only if every check passes
 npm run sandbox -- preflight --offline    # configuration only; always NOT READY
 npm run sandbox -- create --confirm-testnet   # preflight again, then ONE testnet order + invoice
-npm run sandbox -- refresh                # preflight again, then one provider read of that sandbox order
+npm run sandbox -- refresh                # preflight with an order check before the provider, then one provider read of that sandbox order
 npm run sandbox -- check-tx < tx.json     # offline Orchard-only policy check of getrawtransaction output
 ```
 
@@ -57,18 +57,19 @@ The preflight checks, in order:
 4. Database URL present, TLS or loopback, and not the production URL.
 5. Operator's disposable flag.
 6. Only if 1 to 5 all pass: one read-only transaction on the database (5 s). It resolves the five checkout tables into one schema, and reads the catalog for every CHECK constraint on `checkout_invoices.payment_address`. There must be exactly one, it must be validated, and its definition (`pg_get_constraintdef`) must equal the one `db/sandbox/0001_testnet_only.sql` creates. The name is not trusted: a renamed mainnet constraint, a permissive check, a `NOT VALID` check or an extra address check is refused. The probe never inserts, migrates or writes.
-7. Only if 6 passes: one unauthenticated `GET https://api.testnet.cipherpay.app/api/health`: 5 s overall, no redirects, body read up to 4096 bytes. A larger declared length is refused before reading, and a longer stream is cancelled at the limit.
+7. `refresh` only, if 6 passes: the order check below, reading the store only.
+8. Only if every earlier step passes: one unauthenticated `GET https://api.testnet.cipherpay.app/api/health`: 5 s overall, no redirects, body read up to 4096 bytes. A larger declared length is refused before reading, and a longer stream is cancelled at the limit.
 
 It prints variable names and pass/fail, never values. Anything missing, skipped or failing makes it **NOT READY**. A step it did not run is reported `SKIPPED` with the reason, so the report says which resources were actually contacted: after a local refusal, neither the database nor the provider.
 
-`create` and `refresh` both run this full preflight first, because both open the order store. When it is not ready, no store is opened. `refresh` reads and checks its order file (recovery code shape, `network: "testnet"`, sandbox offer version) before the preflight, so a missing or mislabelled file contacts nothing.
+`create` and `refresh` both run this full preflight first, because both open the order store. After a local refusal no store is opened. `refresh` reads and checks its order file (recovery code shape, `network: "testnet"`, sandbox offer version) before the preflight, so a missing or mislabelled file contacts nothing.
 
-`refresh` then checks the order before any provider read or change:
+`refresh` runs in this order: order file, local configuration, read-only schema check, the loaded order, then provider health, then the invoice read. The order check (step 7) runs inside the preflight, before the provider is contacted at all:
 
 - The order file must hold a well-formed recovery code, `network: "testnet"` and the sandbox offer version. The file's labels are only a first filter.
 - The loaded order must be the sandbox offer and version. Any receipt must be for that offer, and every invoice address must be a testnet `utest1` address.
 
-A mainnet preorder, or any other order, is refused whatever its file says. It gets no provider read, and its state and receipt are unchanged.
+A missing order, a mainnet preorder, or any other order is refused whatever its file says. The report shows `order_identity` failing and provider health `SKIPPED`: no health read and no invoice read. The store is read, never changed, and is closed. The order is checked again just before the invoice read.
 
 `create` refuses to run if an order file already exists: one attempt per file. It writes the recovery code to the 0600 file before requesting the invoice, and never prints it. It prints the testnet payment URI and an evidence JSON with state, amount, address, expiry, received amount and receipt, but no code, key or URL. There is no polling and no background process. Run `refresh` by hand.
 
@@ -123,11 +124,11 @@ Fetch the public transaction as verbose JSON from a node or wallet the operator 
 
 - It is a v5 (NU5) transaction: `version` 5, `overwintered` true, `versiongroupid` `26a7270a`. Orchard is active on both mainnet and testnet since NU5.
 - `vin`, `vout` and `vjoinsplit` are present and empty: no transparent value and no Sprout.
-- `vShieldedSpend` and `vShieldedOutput` are present and empty, and the Sapling balance is 0: no Sapling value. Every Sapling balance form present (`valueBalance` in ZEC, `valueBalanceZat`) must be well formed, zero and in agreement. Both absent counts as zero, because the v5 encoding omits `valueBalanceSapling` when there are no Sapling spends or outputs (ZIP 225).
+- `vShieldedSpend` and `vShieldedOutput` are present and empty, and the Sapling balance is 0: no Sapling value. Every Sapling balance form present (`valueBalance` in ZEC, `valueBalanceZat`) must be well formed, zero and in agreement. A ZEC value must denote an exact zatoshi amount: `0.000000004` is refused, not rounded to zero. Both absent counts as zero, because the v5 encoding omits `valueBalanceSapling` when there are no Sapling spends or outputs (ZIP 225).
 - `orchard.actions` is non-empty, and every action field has its exact ZIP 225 width in lower-case hex: `cv`, `nullifier`, `rk`, `cmx` and `ephemeralKey` 32 bytes, `encCiphertext` 580, `outCiphertext` 80, `spendAuthSig` 64.
 - The bundle carries the fields a non-empty Orchard bundle requires: `anchor` 32 bytes, `proof` exactly 2720 + 2272 × (number of actions) bytes, `bindingSig` 64 bytes.
 - `orchard.flags.enableSpends` and `enableOutputs` are both true.
-- `orchard.valueBalanceZat` is a positive integer. With nothing else moving value, it is the fee. `valueBalance` in ZEC, if present, must agree with it.
+- `orchard.valueBalanceZat` is a positive integer. With nothing else moving value, it is the fee. `valueBalance` in ZEC, if present, must be an exact zatoshi amount (at most eight decimal places, in any JSON notation such as `0.0001` or `1e-4`) equal to it. Nothing is rounded: `0.000100004` beside `10000` fails.
 
 Contradictory or malformed data and any cross-pool transfer are `fail`. Incomplete data (a required field absent) is `unverified`, as is a transaction version it does not know: v6 and later, for example after a future network upgrade. Neither ever passes, and both exit 1. Field widths are structural checks only: proofs and signatures are not verified.
 

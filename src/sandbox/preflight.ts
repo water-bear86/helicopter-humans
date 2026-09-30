@@ -1,7 +1,8 @@
 // Preflight for the CipherPay testnet sandbox check. Read-only and bounded: it checks configuration
-// by name and shape first, and only when all of that passes, one read-only database probe and then
-// one unauthenticated provider health GET. It
-// never prints a configuration value, and it fails closed: anything missing or unverified is not ready.
+// by name and shape first, and only when all of that passes, one read-only database probe, then the
+// caller's own database-side check if it supplied one (refresh checks the loaded order's identity),
+// and only then one unauthenticated provider health GET. It never prints a configuration value, and
+// it fails closed: anything missing or unverified is not ready.
 //
 // The sandbox harness is testnet only. There is no mainnet mode and no network fallback here; the
 // mainnet payment test is a separate, explicitly authorised step (docs/SANDBOX_TEST.md).
@@ -36,7 +37,13 @@ export interface PreflightDeps {
   fetch?: typeof fetch
   probeDatabase?: (connectionString: string) => Promise<DatabaseProbe>
   offline?: boolean
+  // Runs after the schema check passes and before the provider is contacted; a non-pass skips the
+  // provider. Must not contact the provider itself.
+  beforeProvider?: () => Promise<Check>
 }
+
+// What a command may add to the preflight. Anything supplied as the command's preflight must pass it on.
+export type PreflightStages = Pick<PreflightDeps, 'beforeProvider'>
 
 export const SANDBOX_ENV = Object.freeze({
   network: 'SANDBOX_NETWORK',
@@ -180,8 +187,11 @@ export async function runPreflight(env: Env, deps: PreflightDeps = {}): Promise<
     } catch {
       add('database_schema', 'fail', 'database unreachable or query refused within 5 s')
     }
-    if (schemaOk) checks.push(await providerHealth(deps.fetch ?? fetch))
-    else add('provider_testnet_health', 'skipped', 'database check failed: provider not contacted')
+    const before = schemaOk && deps.beforeProvider ? await deps.beforeProvider() : undefined
+    if (before) checks.push(before)
+    if (!schemaOk) add('provider_testnet_health', 'skipped', 'database check failed: provider not contacted')
+    else if (before && before.status !== 'pass') add('provider_testnet_health', 'skipped', `${before.id} did not pass: provider not contacted`)
+    else checks.push(await providerHealth(deps.fetch ?? fetch))
   }
 
   return {

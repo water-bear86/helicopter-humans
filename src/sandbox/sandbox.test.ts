@@ -1,10 +1,12 @@
 // The testnet sandbox harness and preflight, against the simulated provider in testnet mode. The
 // PostgreSQL section needs CHECKOUT_PG_TEST_URL (a disposable server, see docs/CHECKOUT.md) and is
 // reported as skipped without it.
+import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { encodeBech32, encodeBech32m, shieldedAddressKind } from '../checkout/address'
@@ -17,7 +19,7 @@ import { MemoryOrderStore, type OrderStore } from '../checkout/store'
 import { PostgresOrderStore } from '../checkout/store-postgres'
 import { runSandboxCommand } from './commands'
 import { checkShieldedTransaction, createTestnetOrder, refreshTestnetOrder, SANDBOX_OFFER, type HarnessDeps } from './harness'
-import { probeDatabase, runPreflight } from './preflight'
+import { probeDatabase, runPreflight, type PreflightStages } from './preflight'
 
 const KEY = 'cpay_sk_sandbox_fixture_value_1234'
 const DB = 'postgres://sandbox:pw-secret@db.sandbox.example/hh_sandbox?sslmode=require'
@@ -235,7 +237,7 @@ function writeOrderFile(file: string, content: Record<string, unknown>) {
 }
 
 describe('sandbox isolation: refresh never touches a non-sandbox order', () => {
-  const ready = (env: Record<string, string | undefined>) => runPreflight(env, { fetch: healthy, probeDatabase: sandboxDb })
+  const ready = (env: Record<string, string | undefined>, stages?: PreflightStages) => runPreflight(env, { ...stages, fetch: healthy, probeDatabase: sandboxDb })
 
   const refusals: [string, Record<string, string | undefined>][] = [
     ['hosted runtime', { VERCEL: '1' }],
@@ -250,7 +252,7 @@ describe('sandbox isolation: refresh never touches a non-sandbox order', () => {
     const db = vi.fn(sandboxDb)
     const makeDeps = vi.fn()
     const calls = () => ({ health: health.mock.calls.length, db: db.mock.calls.length, makeDeps: makeDeps.mock.calls.length })
-    return { preflight: (env: Record<string, string | undefined>) => runPreflight(env, { fetch: health, probeDatabase: db }), makeDeps, calls }
+    return { preflight: (env: Record<string, string | undefined>, stages?: PreflightStages) => runPreflight(env, { ...stages, fetch: health, probeDatabase: db }), makeDeps, calls }
   }
 
   it.each(refusals)('refresh with a valid sandbox order file contacts nothing when refused: %s', async (_label, override) => {
@@ -304,7 +306,7 @@ describe('sandbox isolation: refresh never touches a non-sandbox order', () => {
     const code = await mainnetFulfilledOrder(deps.store)
     writeOrderFile(deps.orderFile, { recoveryCode: code, network: label, offerVersion: SANDBOX_OFFER.version })
     const errors: string[] = []
-    const exit = await runSandboxCommand('refresh', [], { env: COMPLETE, orderFile: deps.orderFile, preflight: ready, makeDeps: () => deps, out: () => {}, err: (l) => errors.push(l) })
+    const exit = await runSandboxCommand('refresh', [], { env: COMPLETE, orderFile: deps.orderFile, preflight: ready, makeDeps: () => deps, out: (l) => errors.push(l), err: (l) => errors.push(l) })
     expect(exit).toBe(1)
     expect(errors.join('\n')).toMatch(/refused/)
     expect(errors.join('\n')).not.toContain(code)
@@ -337,6 +339,76 @@ describe('sandbox isolation: refresh never touches a non-sandbox order', () => {
     const lines: string[] = []
     expect(await runSandboxCommand('refresh', [], { env: COMPLETE, orderFile: deps.orderFile, preflight: ready, makeDeps: () => deps, out: (l) => lines.push(l) })).toBe(0)
     expect(lines.join('\n')).toContain('"state": "fulfilled"')
+  })
+})
+
+describe('sandbox refresh order: schema, then the loaded order, then the provider', () => {
+  // Records every store read, store close and provider health read, around the real preflight stages.
+  const staged = (deps: ReturnType<typeof fixtureDeps>) => {
+    const events: string[] = []
+    const find = deps.store.findByCredentialHash.bind(deps.store)
+    vi.spyOn(deps.store, 'findByCredentialHash').mockImplementation(async (hash) => {
+      events.push('order')
+      return find(hash)
+    })
+    deps.store.close = vi.fn(async () => void events.push('close'))
+    const health = vi.fn(async () => {
+      events.push('health')
+      return healthy()
+    })
+    const preflight = (env: Record<string, string | undefined>, stages?: PreflightStages) =>
+      runPreflight(env, { ...stages, fetch: health, probeDatabase: async () => (events.push('schema'), sandboxDb()) })
+    const lines: string[] = []
+    const run = (preflightFn = preflight) => runSandboxCommand('refresh', [], { env: COMPLETE, orderFile: deps.orderFile, preflight: preflightFn, makeDeps: () => deps, out: (l) => lines.push(l), err: (l) => lines.push(l) })
+    return { events, health, lines, run, find }
+  }
+
+  it.each([
+    ['a missing order', async () => undefined, 'order not found in the sandbox database'],
+    ['a fulfilled mainnet preorder', mainnetFulfilledOrder, 'order is not a sandbox testnet order'],
+  ] as const)('refuses %s with valid file metadata before any provider access, and closes the store', async (_label, setup, reason) => {
+    const deps = fixtureDeps()
+    const existing = await setup(deps.store)
+    const code = existing ?? 'hhr_' + 'A'.repeat(43)
+    writeOrderFile(deps.orderFile, { recoveryCode: code, network: 'testnet', offerVersion: SANDBOX_OFFER.version })
+    const before = await deps.store.findByCredentialHash(hashRecoveryCode(code))
+    const s = staged(deps)
+    expect(await s.run()).toBe(1)
+    expect(s.events).toEqual(['schema', 'order', 'close'])
+    expect(s.health).not.toHaveBeenCalled()
+    expect(deps.fixture.calls.get).toBe(0)
+    expect(await s.find(hashRecoveryCode(code))).toEqual(before)
+    const output = s.lines.join('\n')
+    expect(output).toContain(`order_identity: refused: ${reason}`)
+    expect(output).toMatch(/provider_testnet_health: order_identity did not pass: provider not contacted/)
+    expect(output).not.toMatch(/Nothing was read from the provider/)
+    expect(output).not.toContain(code)
+  })
+
+  it('a genuine sandbox order is identified before provider health, then refreshed', async () => {
+    const deps = fixtureDeps()
+    await createTestnetOrder(deps)
+    const inv = [...deps.fixture.invoices.values()][0]
+    deps.fixture.pay(inv.id, inv.price_zatoshis)
+    deps.fixture.confirm(inv.id)
+    const reads = deps.fixture.calls.get
+    const s = staged(deps)
+    expect(await s.run()).toBe(0)
+    expect(s.events.slice(0, 3)).toEqual(['schema', 'order', 'health'])
+    expect(s.events.at(-1)).toBe('close')
+    expect(deps.fixture.calls.get).toBeGreaterThan(reads)
+    expect(s.lines.join('\n')).toContain('"state": "fulfilled"')
+  })
+
+  it('refuses to continue when a supplied preflight drops the order stage', async () => {
+    const deps = fixtureDeps()
+    await createTestnetOrder(deps)
+    const s = staged(deps)
+    const dropsStages = (env: Record<string, string | undefined>) => runPreflight(env, { fetch: healthy, probeDatabase: sandboxDb })
+    const reads = deps.fixture.calls.get
+    expect(await s.run(dropsStages)).toBe(1)
+    expect(deps.fixture.calls.get).toBe(reads)
+    expect(s.lines.join('\n')).toMatch(/the preflight did not check the loaded order before the provider/)
   })
 })
 
@@ -378,6 +450,12 @@ describe('shielded transaction policy check (offline, Orchard only)', () => {
     ['Orchard spends disabled', (t) => ({ ...t, orchard: { ...t.orchard, flags: { enableSpends: false, enableOutputs: true } } }), 'Orchard spends disabled (value did not come from Orchard)'],
     ['negative Orchard balance', (t) => ({ ...t, orchard: { ...t.orchard, valueBalance: -0.0001, valueBalanceZat: -10_000 } }), 'Orchard value balance is not a positive fee'],
     ['disagreeing Orchard balances', (t) => ({ ...t, orchard: { ...t.orchard, valueBalance: 1 } }), 'Orchard valueBalance disagrees with valueBalanceZat'],
+    ['sub-zatoshi Sapling ZEC, zero zatoshi', (t) => ({ ...t, valueBalance: 0.000000004 }), 'Sapling valueBalance is not an exact zatoshi amount'],
+    ['negative sub-zatoshi Sapling ZEC, zero zatoshi', (t) => ({ ...t, valueBalance: -0.000000004 }), 'Sapling valueBalance is not an exact zatoshi amount'],
+    ['sub-zatoshi Sapling ZEC, zatoshi absent', (t) => ({ ...t, valueBalance: 0.000000004, valueBalanceZat: undefined }), 'Sapling valueBalance is not an exact zatoshi amount'],
+    ['sub-zatoshi Orchard ZEC beside its zatoshi', (t) => ({ ...t, orchard: { ...t.orchard, valueBalance: 0.000100004 } }), 'Orchard valueBalance is not an exact zatoshi amount'],
+    ['Orchard ZEC one zatoshi off', (t) => ({ ...t, orchard: { ...t.orchard, valueBalance: 0.00010001 } }), 'Orchard valueBalance disagrees with valueBalanceZat'],
+    ['Orchard ZEC above the supply', (t) => ({ ...t, orchard: { ...t.orchard, valueBalance: 21_000_001, valueBalanceZat: undefined } }), 'Orchard valueBalance is not an exact zatoshi amount'],
     ['transparent input', (t) => ({ ...t, vin: [{ txid: 'ef'.repeat(32), vout: 0 }] }), 'has transparent inputs'],
     ['transparent output', (t) => ({ ...t, vout: [{ valueZat: 1 }] }), 'has transparent outputs'],
     ['Sprout joinsplit', (t) => ({ ...t, vjoinsplit: [{}] }), 'has Sprout joinsplits'],
@@ -418,6 +496,40 @@ describe('shielded transaction policy check (offline, Orchard only)', () => {
 
   it('treats a Sapling balance absent in both forms as the zero the v5 encoding omits', () => {
     expect(checkShieldedTransaction({ ...orchardOnlyTx(), valueBalance: undefined, valueBalanceZat: undefined })).toMatchObject({ fullyShielded: true, verdict: 'orchard_only' })
+  })
+
+  // The JSON text is parsed as the RPC output would be, so each notation reaches the check as a double.
+  it.each([
+    ['0.0001', 10_000],
+    ['1e-4', 10_000],
+    ['1.0E-4', 10_000],
+    ['0.00010000', 10_000],
+    ['0.00015', 15_000],
+    ['0.0002', 20_000],
+    ['0.00005', 5_000],
+    ['0.00012345', 12_345],
+    ['0.29', 29_000_000],
+    ['20999999.99999999', 2_099_999_999_999_999],
+  ])('accepts the exact Orchard fee %s ZEC as %i zatoshis', async (zec, zat) => {
+    const text = JSON.stringify({ ...orchardOnlyTx(), orchard: { ...orchardOnlyTx().orchard, valueBalanceZat: zat } }).replace('"valueBalance":0.0001', `"valueBalance":${zec}`)
+    expect(checkShieldedTransaction(JSON.parse(text))).toMatchObject({ fullyShielded: true, verdict: 'orchard_only', feeZatoshis: zat })
+    expect(await runSandboxCommand('check-tx', [], { env: {}, orderFile: '', readStdin: () => text, out: () => {} })).toBe(0)
+  })
+
+  it.each(['0', '-0', '0.0', '0e0'])('accepts the zero Sapling balance written %s', (zec) => {
+    const text = JSON.stringify(orchardOnlyTx()).replace('"valueBalance":0,', `"valueBalance":${zec},`)
+    expect(checkShieldedTransaction(JSON.parse(text))).toMatchObject({ fullyShielded: true, verdict: 'orchard_only' })
+  })
+
+  it.each([
+    ['nonzero sub-zatoshi Sapling ZEC with integer zero', (t: Tx) => ({ ...t, valueBalance: 0.000000004 })],
+    ['negative sub-zatoshi Sapling ZEC with integer zero', (t: Tx) => ({ ...t, valueBalance: -0.000000004 })],
+    ['nonzero sub-zatoshi Sapling ZEC without integer', (t: Tx) => ({ ...t, valueBalance: 0.000000004, valueBalanceZat: undefined })],
+    ['sub-zatoshi Orchard ZEC contradiction', (t: Tx) => ({ ...t, orchard: { ...t.orchard, valueBalance: 0.000100004 } })],
+  ])('check-tx exits 1 on %s', async (_label, change) => {
+    const out: string[] = []
+    expect(await runSandboxCommand('check-tx', [], { env: {}, orderFile: '', readStdin: () => JSON.stringify(change(orchardOnlyTx())), out: (l) => out.push(l) })).toBe(1)
+    expect(JSON.parse(out.join('\n'))).toMatchObject({ fullyShielded: false, verdict: 'fail' })
   })
 
   it('reports an unknown later transaction version as unverified, not passed', () => {
@@ -517,7 +629,7 @@ describe.skipIf(!PG_URL)('sandbox database (PostgreSQL)', () => {
       url.searchParams.set('options', `-c search_path=${other}`)
       const env = { ...COMPLETE, SANDBOX_DATABASE_URL: url.toString() }
       const makeDeps = vi.fn()
-      const exit = await runSandboxCommand('refresh', [], { env, orderFile: '/nonexistent/order.json', preflight: (e) => runPreflight(e, { fetch: healthy }), makeDeps, out: () => {} })
+      const exit = await runSandboxCommand('refresh', [], { env, orderFile: '/nonexistent/order.json', preflight: (e, stages) => runPreflight(e, { ...stages, fetch: healthy }), makeDeps, out: () => {} })
       expect(exit).toBe(1)
       expect(makeDeps).not.toHaveBeenCalled()
     } finally {
@@ -525,6 +637,63 @@ describe.skipIf(!PG_URL)('sandbox database (PostgreSQL)', () => {
       await admin.end()
     }
   })
+
+  // The built tool, as an operator runs it, against a real sandbox database. Every fetch (provider
+  // health or invoice) is counted and blocked by a preload; database access is real.
+  it('the built CLI refuses a missing or non-sandbox order with no provider access, and identifies a sandbox order before health', async () => {
+    const root = fileURLToPath(new URL('../..', import.meta.url))
+    const build = spawnSync(process.execPath, ['node_modules/vite/bin/vite.js', 'build', '--config', 'vite.tools.config.ts', '--logLevel', 'warn'], { cwd: root, encoding: 'utf8', timeout: 120_000 })
+    expect(build.status).toBe(0)
+    const other = `sandbox_cli_${randomUUID().replaceAll('-', '')}`
+    const admin = new pg.Client({ connectionString: PG_URL })
+    await admin.connect()
+    await admin.query(`CREATE SCHEMA ${other}; SET search_path TO ${other}`)
+    await admin.query(`BEGIN; ${read('../../db/migrations/0001_checkout_orders.sql')}; ${read('../../db/sandbox/0001_testnet_only.sql')}; COMMIT;`)
+    const url = new URL(PG_URL!)
+    url.searchParams.set('options', `-c search_path=${other}`)
+    const pool = new pg.Pool({ connectionString: url.toString(), max: 2 })
+    const dir = mkdtempSync(join(tmpdir(), 'hh-sandbox-cli-'))
+    const preload = join(dir, 'preload.mjs')
+    writeFileSync(preload, `import { writeFileSync } from 'node:fs'
+let fetches = 0
+globalThis.fetch = async () => { fetches++; throw new Error('blocked by test') }
+process.on('exit', () => writeFileSync(process.env.TEST_COUNTS_FILE, JSON.stringify({ fetches })))
+`)
+    const run = (recoveryCode: string) => {
+      const orderFile = join(dir, `${randomUUID()}.json`)
+      const counts = join(dir, `${randomUUID()}.counts.json`)
+      writeOrderFile(orderFile, { recoveryCode, network: 'testnet', offerVersion: SANDBOX_OFFER.version })
+      const env = { PATH: process.env.PATH, ...COMPLETE, SANDBOX_DATABASE_URL: url.toString(), SANDBOX_ORDER_FILE: orderFile, TEST_COUNTS_FILE: counts }
+      const result = spawnSync(process.execPath, ['--import', preload, '.tools-build/sandbox-preflight.js', 'refresh'], { cwd: root, env, encoding: 'utf8', timeout: 20_000 })
+      return { exit: result.status, output: result.stdout + result.stderr, fetches: JSON.parse(readFileSync(counts, 'utf8')).fetches as number }
+    }
+    try {
+      const store = new PostgresOrderStore({ pool })
+      const provider = fixtureDeps().provider
+      const { recoveryCode: mainnetCode } = await createCheckoutService({ store, provider, offer: DRAFT_OFFER }).createOrder()
+      const { recoveryCode: sandboxCode } = await createCheckoutService({ store, provider, offer: SANDBOX_OFFER, network: 'testnet' }).createOrder()
+      const before = await store.findByCredentialHash(hashRecoveryCode(mainnetCode))
+
+      const missing = run('hhr_' + 'A'.repeat(43))
+      expect(missing).toMatchObject({ exit: 1, fetches: 0 })
+      expect(missing.output).toContain('order_identity: refused: order not found in the sandbox database')
+
+      const mainnet = run(mainnetCode)
+      expect(mainnet).toMatchObject({ exit: 1, fetches: 0 })
+      expect(mainnet.output).toContain('order_identity: refused: order is not a sandbox testnet order')
+      expect(mainnet.output).not.toContain(mainnetCode)
+      expect(await store.findByCredentialHash(hashRecoveryCode(mainnetCode))).toEqual(before)
+
+      // Identity passes, then exactly one health read (blocked here, so not ready); no invoice read.
+      const sandbox = run(sandboxCode)
+      expect(sandbox).toMatchObject({ exit: 1, fetches: 1 })
+      expect(sandbox.output).toMatch(/order_identity: the loaded order is a sandbox testnet order[\s\S]*provider_testnet_health: testnet API unreachable/)
+    } finally {
+      await pool.end()
+      await admin.query(`DROP SCHEMA ${other} CASCADE`)
+      await admin.end()
+    }
+  }, 150_000)
 
   it('the helper refuses a non-sandbox order in the durable sandbox store, leaving it unchanged', async () => {
     const pool = new pg.Pool({ connectionString: scoped(), max: 3 })
