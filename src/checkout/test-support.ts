@@ -479,6 +479,85 @@ export function serviceContract(name: string, makeStore: () => Promise<OrderStor
       expect(h.provider.calls.create).toBe(2)
     })
 
+    // A rejected quote was never payable, but its provider address can still receive money.
+    async function rejectedOrder(h: Harness) {
+      const { recoveryCode: code } = await h.service.createOrder()
+      h.provider.queueCreate('fee_recipient')
+      expect((await h.service.ensureInvoice(code)).state).toBe('quote_rejected')
+      return { code, rejected: lastInvoice(h) }
+    }
+
+    it('money on a rejected quote is recorded, blocks a new quote and can be refunded, never shown as payable', async () => {
+      const h = harness(await makeStore())
+      const { code, rejected } = await rejectedOrder(h)
+      h.provider.pay(rejected.id, rejected.price_zatoshis)
+      const view = await h.service.ensureInvoice(code, { newQuote: true })
+      expect(view).toMatchObject({ state: 'needs_resolution', stateReason: 'payment_on_rejected_quote', payment: null })
+      expect(view.received).toMatchObject({ receivedZec: (rejected.price_zatoshis / 1e8).toFixed(8).replace(/0+$/, '') })
+      expect(view.actions).toMatchObject({ newQuote: false, requestRefund: true })
+      expect(h.provider.calls.create).toBe(1)
+      h.provider.confirm(rejected.id)
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'needs_resolution', payment: null, receipt: null })
+      expect(await h.service.requestRefund(code, validUnifiedAddress())).toMatchObject({ refundRequest: { address: expect.stringContaining('…') } })
+    })
+
+    it('refresh alone records money on a rejected quote', async () => {
+      const h = harness(await makeStore())
+      const { code, rejected } = await rejectedOrder(h)
+      h.provider.pay(rejected.id, 1000)
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'needs_resolution', stateReason: 'payment_on_rejected_quote', payment: null })
+    })
+
+    it('a new quote is refused while a rejected quote cannot be read, or has gone missing', async () => {
+      const h = harness(await makeStore())
+      const { code, rejected } = await rejectedOrder(h)
+      const blind = createCheckoutService({
+        store: h.store,
+        offer: DRAFT_OFFER,
+        now: () => h.clock.t,
+        provider: {
+          createInvoice: h.client.createInvoice,
+          getInvoice: (id) => (id === rejected.id ? Promise.resolve({ kind: 'unavailable', reason: 'network_or_timeout' }) : h.client.getInvoice(id)),
+        },
+      })
+      expect(await blind.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'quote_rejected', notice: 'provider_unavailable', payment: null })
+      expect(h.provider.calls.create).toBe(1)
+      h.provider.invoices.delete(rejected.id)
+      expect(await h.service.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'reconciliation_required', stateReason: 'provider_invoice_missing', payment: null })
+      expect(h.provider.calls.create).toBe(1)
+    })
+
+    it('a rejected quote whose provider state no longer adds up blocks a new quote', async () => {
+      const h = harness(await makeStore())
+      const { code, rejected } = await rejectedOrder(h)
+      h.provider.invoices.get(rejected.id)!.price_zec *= 2
+      expect(await h.service.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'reconciliation_required', stateReason: 'rejected_quote_changed', payment: null })
+      expect(h.provider.calls.create).toBe(1)
+    })
+
+    it('a zero-paid rejected quote is read and may then be deliberately replaced', async () => {
+      const h = harness(await makeStore())
+      const { code, rejected } = await rejectedOrder(h)
+      const gets = h.provider.calls.get
+      const view = await h.service.ensureInvoice(code, { newQuote: true })
+      expect(view.state).toBe('awaiting_payment')
+      expect(view.payment!.address).not.toBe(rejected.payment_address)
+      // The rejected quote was read before the claim; after creation both invoices are read again.
+      expect(h.provider.calls.get - gets).toBe(3)
+    })
+
+    it('money on a rejected quote two quotes back blocks the next replacement', async () => {
+      const h = harness(await makeStore())
+      const { code, rejected } = await rejectedOrder(h)
+      const second = await h.service.ensureInvoice(code, { newQuote: true })
+      const secondId = activeInvoiceId(h, second.payment!.address)
+      h.provider.expire(secondId)
+      expect((await h.service.refresh(code)).state).toBe('expired')
+      h.provider.pay(rejected.id, rejected.price_zatoshis)
+      expect(await h.service.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'needs_resolution', stateReason: 'payment_on_rejected_quote', payment: null })
+      expect(h.provider.calls.create).toBe(2)
+    })
+
     it('a store failure before the claim means no provider call; a failure after it means no second invoice', async () => {
       let failing = false
       const base = await makeStore()

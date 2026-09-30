@@ -312,6 +312,21 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
     }
   }
 
+  // A rejected quote was never shown as payable, but its address exists at the provider and can still
+  // receive money. It stays rejected (never payable, fee recipients never stripped); its reads only
+  // record what arrived and stop the order when something did or the invoice no longer adds up.
+  async function reconcileRejected(s: OrderSnapshot, row: InvoiceRow, p: ProviderInvoice, tx: OrderTx): Promise<{ patch: InvoicePatch; finding: Finding | null }> {
+    const patch = observed(row, p)
+    if (p.detectedTxid) {
+      const owner = await tx.claimTxid(p.detectedTxid, s.order.id, row.providerInvoiceId, iso())
+      if (owner !== s.order.id) return { patch, finding: { state: 'quarantined', reason: 'payment_reused_by_another_order' } }
+    }
+    if (p.receivedZatoshis > 0) return { patch, finding: { state: 'needs_resolution', reason: 'payment_on_rejected_quote' } }
+    if (p.status !== 'pending' && p.status !== 'expired') return { patch, finding: { state: 'reconciliation_required', reason: `rejected_quote_status:${p.status.slice(0, 32)}` } }
+    if (p.priceZec !== row.priceZec) return { patch, finding: { state: 'reconciliation_required', reason: 'rejected_quote_changed' } }
+    return { patch, finding: null }
+  }
+
   function sameIdentity(row: InvoiceRow, p: ProviderInvoice): boolean {
     return p.id === row.providerInvoiceId && p.memoCode === row.memoCode && p.paymentAddress === row.paymentAddress
   }
@@ -338,6 +353,13 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
       const p = read.invoice
       if (!sameIdentity(row, p)) {
         other = worst(other, { state: 'reconciliation_required', reason: 'provider_invoice_identity_changed' })
+        continue
+      }
+      if (row.rejectedReason) {
+        if (isStaleRead(row, p)) continue
+        const r = await reconcileRejected(s, row, p, tx)
+        updates.push(r.patch)
+        if (r.finding) other = worst(other, r.finding)
         continue
       }
       if (row.priceZatoshis === null) {
@@ -406,8 +428,8 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
     const reads = new Map<string, ReadOutcome>()
     let unavailable = false
     // Bounded: at most maxQuotes invoices per order, one request each, each with the client timeout.
+    // Rejected quotes included: a quote we never displayed can still have been paid.
     for (const row of s.invoices) {
-      if (row.rejectedReason) continue
       const read = await provider.getInvoice(row.providerInvoiceId)
       if (read.kind === 'unavailable') unavailable = true
       reads.set(row.providerInvoiceId, read)
@@ -495,7 +517,7 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
         if (newQuote && !REPLACEABLE.has(o.state)) return keep(REPLACEABLE.has(cur.order.state) ? 'unchanged' : 'not_allowed')
         if (!newQuote && o.state !== 'new') return keep('unchanged')
         // Unavailable, or an invoice we did not read: we cannot know nothing was paid. No new quote.
-        const unread = cur.invoices.some((i) => !i.rejectedReason && prior?.reads.get(i.providerInvoiceId)?.kind !== 'ok')
+        const unread = cur.invoices.some((i) => prior?.reads.get(i.providerInvoiceId)?.kind !== 'ok')
         if (prior && (prior.unavailable || unread)) return keep('unreconciled')
         // Terms are the order's; a changed global offer never reprices or relabels an existing order.
         if (o.offerId !== offer.id || o.offerVersion !== offer.version) return keep('not_allowed')
