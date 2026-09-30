@@ -23,7 +23,7 @@ export type CreateScenario =
   | 'amount_mismatch'
   | 'oversized_response'
 
-interface FixtureInvoice {
+export interface FixtureInvoice {
   id: string
   memo_code: string
   amount: number

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { encodeBech32, encodeBech32m } from './address.js'
 import { createCipherPayClient, type InvoiceProvider } from './cipherpay.js'
 import { hashRecoveryCode } from './credential.js'
-import { createFixtureCipherPay, FIXTURE_API_KEY, FIXTURE_ORIGIN, type FixtureCipherPay } from './fixture-cipherpay.js'
+import { createFixtureCipherPay, FIXTURE_API_KEY, FIXTURE_ORIGIN, type FixtureCipherPay, type FixtureInvoice } from './fixture-cipherpay.js'
 import { DRAFT_OFFER } from './offer.js'
 import { CheckoutError, createCheckoutService, type CheckoutService } from './service.js'
 import { StoreUnavailableError, type OrderStore } from './store.js'
@@ -527,13 +527,35 @@ export function serviceContract(name: string, makeStore: () => Promise<OrderStor
       expect(h.provider.calls.create).toBe(1)
     })
 
-    it('a rejected quote whose provider state no longer adds up blocks a new quote', async () => {
-      const h = harness(await makeStore())
-      const { code, rejected } = await rejectedOrder(h)
-      h.provider.invoices.get(rejected.id)!.price_zec *= 2
-      expect(await h.service.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'reconciliation_required', stateReason: 'rejected_quote_changed', payment: null })
-      expect(h.provider.calls.create).toBe(1)
-    })
+    // Only the exact quote we rejected may be replaced: our fiat terms, its creation float, and an
+    // integer that follows from that float. Checked for the latest quote and for one further back.
+    const rejectedChanges: [string, (i: FixtureInvoice) => void, string][] = [
+      ['floating price', (i) => void (i.price_zec *= 2), 'rejected_quote_price_zec_changed'],
+      ['fiat amount', (i) => void (i.amount = 123), 'rejected_quote_fiat_terms_changed'],
+      ['currency', (i) => void (i.currency = 'EUR'), 'rejected_quote_fiat_terms_changed'],
+      ['integer quote', (i) => void (i.reported_price_zatoshis = i.price_zatoshis + 1), 'rejected_quote_price_zatoshis_inconsistent'],
+    ]
+    for (const [what, change, reason] of rejectedChanges) {
+      it(`a rejected quote reporting a changed ${what} blocks a new quote`, async () => {
+        const h = harness(await makeStore())
+        const { code, rejected } = await rejectedOrder(h)
+        change(h.provider.invoices.get(rejected.id)!)
+        expect(await h.service.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'reconciliation_required', stateReason: reason, payment: null })
+        expect(h.provider.calls.create).toBe(1)
+        expect(await h.service.refresh(code)).toMatchObject({ state: 'reconciliation_required', payment: null })
+      })
+
+      it(`a rejected quote two quotes back reporting a changed ${what} blocks the next replacement`, async () => {
+        const h = harness(await makeStore())
+        const { code, rejected } = await rejectedOrder(h)
+        const second = await h.service.ensureInvoice(code, { newQuote: true })
+        h.provider.expire(activeInvoiceId(h, second.payment!.address))
+        expect((await h.service.refresh(code)).state).toBe('expired')
+        change(h.provider.invoices.get(rejected.id)!)
+        expect(await h.service.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'reconciliation_required', stateReason: reason, payment: null })
+        expect(h.provider.calls.create).toBe(2)
+      })
+    }
 
     it('a zero-paid rejected quote is read and may then be deliberately replaced', async () => {
       const h = harness(await makeStore())

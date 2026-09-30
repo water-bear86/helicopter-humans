@@ -323,7 +323,13 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
     }
     if (p.receivedZatoshis > 0) return { patch, finding: { state: 'needs_resolution', reason: 'payment_on_rejected_quote' } }
     if (p.status !== 'pending' && p.status !== 'expired') return { patch, finding: { state: 'reconciliation_required', reason: `rejected_quote_status:${p.status.slice(0, 32)}` } }
-    if (p.priceZec !== row.priceZec) return { patch, finding: { state: 'reconciliation_required', reason: 'rejected_quote_changed' } }
+    // Replacing it is only safe while it is exactly the quote we rejected: our fiat terms, the float
+    // it was created with, and an integer that still follows from that float.
+    const changed = (reason: string) => ({ patch, finding: { state: 'reconciliation_required' as const, reason: `rejected_quote_${reason}` } })
+    const terms = termsMismatch(s.order, row, p)
+    if (terms) return changed(terms)
+    if (Math.round(p.priceZec * 1e8) !== p.priceZatoshis) return changed('price_zatoshis_inconsistent')
+    if (row.priceZatoshis !== null && p.priceZatoshis !== row.priceZatoshis) return changed('price_zatoshis_changed')
     return { patch, finding: null }
   }
 
