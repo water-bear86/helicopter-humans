@@ -114,20 +114,26 @@ async function scrollToY(page: import('@playwright/test').Page, y: number) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
 }
 
-const flightPose = (page: import('@playwright/test').Page) =>
-  page.evaluate(() => document.querySelector('.flyer')?.getAttribute('style') ?? document.querySelector('.flight')?.getAttribute('transform'))
+test('the opening pins while scrolling from spying to privacy, and can rewind', async ({ page }) => {
+  const geometry = await page.locator('.privacy-story').evaluate(el => ({top:el.getBoundingClientRect().top+scrollY,span:el.clientHeight-el.querySelector('.story-pin')!.clientHeight}))
+  await scrollToY(page, geometry.top + geometry.span * .3)
+  await expect(page.locator('.privacy-story')).toHaveAttribute('data-stage','printing')
+  const pinned = await page.locator('.story-pin').boundingBox()
+  expect(pinned!.y).toBeCloseTo(0)
+  await scrollToY(page, geometry.top + geometry.span * .8)
+  await expect(page.locator('.privacy-story')).toHaveAttribute('data-stage','protected')
+  await expect(page.locator('#story-heading')).toHaveText('Access denied, human.')
+  expect((await page.locator('.story-pin').boundingBox())!.y).toBeCloseTo(0)
+  await scrollToY(page, geometry.top + geometry.span * .1)
+  await expect(page.locator('.privacy-story')).toHaveAttribute('data-stage','spying')
+})
 
-test('the helicopter patrols at idle and follows scrolling without a caption', async ({ page }) => {
-  // Bring the scene into view on a phone; the desktop flyer remains visible throughout.
-  await page.locator('.hero-art').scrollIntoViewIfNeeded()
-  const start = await flightPose(page)
-  await page.waitForTimeout(700)
-  expect(await flightPose(page)).not.toEqual(start)
-  await expect(page.locator('.whup, .flyer-chip')).toHaveCount(0)
-  await scrollToY(page, 500)
-  const middle = await flightPose(page)
-  await scrollToY(page, 250)
-  expect(await flightPose(page)).not.toEqual(middle)
+test('the opening can be skipped and motion can be paused', async ({ page }) => {
+  await page.getByRole('button',{name:'Pause motion'}).click()
+  await expect(page.getByRole('button',{name:'Resume motion'})).toHaveAttribute('aria-pressed','true')
+  await page.getByRole('link',{name:'Skip to the good stuff'}).click()
+  await expect(page).toHaveURL(/#top$/)
+  await expect(page.locator('.whup,.flyer-chip')).toHaveCount(0)
 })
 
 test('the flight never causes horizontal overflow', async ({ page }) => {
@@ -152,10 +158,11 @@ test('reduced motion keeps the helicopter parked in its scene', async ({ page })
 test.describe('wide screens', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
-  test('the helicopter leaves the scene for the gutter without covering content or taking clicks', async ({ page }) => {
+  test('the helicopter roams and bops without covering content or taking clicks', async ({ page }) => {
     const flyer = page.locator('.flyer')
     await expect(flyer).toHaveAttribute('aria-hidden', 'true')
-    await expect(page.locator('.hero-art .flight')).toBeHidden()
+    await page.getByRole('link',{name:'Skip to the good stuff'}).click()
+    await expect(flyer).toBeVisible()
 
     // Sweep the whole page: the flyer must never cover reading text, controls or windows.
     const overlaps = await page.evaluate(async () => {
@@ -165,6 +172,7 @@ test.describe('wide screens', () => {
       for (let y = 0; y <= document.documentElement.scrollHeight; y += 20) {
         window.scrollTo({ top: y, behavior: 'instant' })
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        if ((flyerEl as HTMLElement).hidden) continue
         const f = flyerEl.getBoundingClientRect()
         if (f.right > document.documentElement.clientWidth) hits.push(`viewport edge at ${y}`)
         for (const el of content) {
@@ -176,13 +184,14 @@ test.describe('wide screens', () => {
     })
     expect(overlaps).toEqual([])
 
-    await scrollToY(page, 1200)
+    await page.locator('#redactor').scrollIntoViewIfNeeded()
+    await expect(flyer).toBeVisible()
     const box = (await flyer.boundingBox())!
     const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.flyer') ?? null, [box.x + box.width / 2, box.y + box.height / 2])
     expect(hit).toBeNull()
 
     // Primary actions still work with the flyer hovering over the hero.
-    await scrollToY(page, 0)
+    await page.locator('#top').scrollIntoViewIfNeeded()
     await page.getByRole('link', { name: 'Redact a log now. Free' }).click()
     await expect(page).toHaveURL(/#redactor$/)
   })
