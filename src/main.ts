@@ -2,7 +2,7 @@ import './styles.css'
 import { config } from './config'
 import { initHelicopter } from './helicopter'
 import { redact } from './redact'
-import { INITIAL_STATE, runCommand, type TerminalState } from './terminal'
+import { INITIAL_STATE, runCommand, safeDemoCommand, type TerminalState } from './terminal'
 
 function $<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id)
@@ -29,7 +29,7 @@ function shred() {
   if (!input.value.trim()) {
     output.value = ''
     copyBtn.disabled = true
-    summary.textContent = 'Nothing to shred. Paste something first.'
+    summary.textContent = 'Nothing to shred. Load the invented sample first.'
     return
   }
   const result = redact(input.value)
@@ -37,8 +37,8 @@ function shred() {
   copyBtn.disabled = false
   const parts = Object.entries(result.counts).map(([label, n]) => `${n} ${label.toLowerCase().replaceAll('_', ' ')}`)
   summary.textContent = result.total
-    ? `Shredded ${result.total}: ${parts.join(', ')}.`
-    : 'Found nothing we recognise. Read it yourself before sharing.'
+    ? `Shredded ${result.total}: ${parts.join(', ')}. Invented sample only.`
+    : 'No recognised patterns in this sample. Zero matches is not a safety verdict.'
 }
 
 $('redact-run').addEventListener('click', shred)
@@ -49,7 +49,7 @@ $('redact-sample').addEventListener('click', () => {
 copyBtn.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(output.value)
-    summary.textContent = 'Copied. The human sees only what you allow.'
+    summary.textContent = 'Invented sample copied. For your own logs, use the downloaded offline tool and review the output.'
   } catch {
     output.select()
     summary.textContent = 'Clipboard blocked by the browser. Output is selected; copy it manually.'
@@ -76,12 +76,13 @@ function print(lines: string[], className?: string) {
 }
 
 function execute(command: string) {
-  print([`$ ${command}`], 'echo')
+  const safe = safeDemoCommand(command)
+  print([safe ? `$ ${safe}` : '$ [unrecognised input omitted]'], 'echo')
   const result = runCommand(command, state)
   state = result.state
   if (result.clear) termOut.replaceChildren()
   print(result.lines)
-  if (command.trim()) history.push(command)
+  if (safe) history.push(safe)
   historyIndex = history.length
 }
 
@@ -91,6 +92,10 @@ termForm.addEventListener('submit', (event) => {
   event.preventDefault()
   execute(termIn.value)
   termIn.value = ''
+})
+termIn.addEventListener('paste', event => {
+  event.preventDefault()
+  print(['Demo commands only. Use the offline tool for your own text.'])
 })
 termIn.addEventListener('keydown', (event) => {
   if (event.key === 'ArrowUp' && historyIndex > 0) {

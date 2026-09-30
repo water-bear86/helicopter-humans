@@ -6,8 +6,8 @@ A privacy layer for your agent. Don't be a helicopter human. Let your agent have
 
 | Part | State | Where |
 | --- | --- | --- |
-| Log redactor | Live. Runs entirely in the browser, no network calls | `src/redact.ts` |
-| classified.exe terminal | Demo (the `redact` command is real) | `src/terminal.ts` |
+| Offline log tool | Free single-file download. Local text-file input, exact-phrase masking, editable preview, reviewed export and clear. Public page is sample-only | `src/offline.ts`, `src/redact.ts`, `docs/OFFLINE_LOG_TOOL.md` |
+| classified.exe terminal | Demo with invented text only. Unknown input is not echoed or retained in history | `src/terminal.ts` |
 | Checkout button | Always off. No build variable can open it | `src/main.ts` |
 | Invoice checkout (Founding Agent Pass preorder) | Prototype, collection hard-disabled. Runs only as a local fixture (`CHECKOUT_MODE=fixture`, never on a host). Draft offer, not approved | `src/checkout/`, `api/checkout/`, `checkout.html`, `docs/CHECKOUT.md` |
 | `GET/POST /api/checkout/orders`, `GET/POST /api/checkout/order` | Fail closed: HTTP 503 `checkout_disabled` on every deployment while any checkout blocker remains in code | `api/checkout/` |
@@ -74,7 +74,7 @@ vercel deploy --prod --yes --scope redemption-c64d16c8
 
 The emitted-function smoke check matters: Vite/Vitest resolve extensionless imports, while Node ESM in the deployed function requires `.js` import specifiers. Keep those extensions throughout the function's runtime dependency chain. The functions import the `packages/payment-adapter` workspace; `vercel build` copies it into each function and records the `node_modules` link in `.vc-config.json` (`filePathMap`). If deploying the exact local Vercel build instead, add `--prebuilt` to the deploy command.
 
-After deployment, exercise the redactor sample and empty-input error, terminal keyboard commands, reduced motion, and disabled checkout on desktop and mobile. Check that `GET /api/status` returns HTTP 200 with `payments.mode: "disabled"`, `payments.collecting: false` and `checkout.collecting: false`, and that `POST /api/pay/quote` and `POST /api/checkout/orders` return 503. Do not treat a successful static build as proof that the server function runs.
+After deployment, download `/offline-redactor.html`, open the saved file locally, and exercise custom masking, review/export invalidation and clear using invented text. Confirm the hosted artifact refuses input, the public preview remains read-only, and the terminal omits unknown input. Check reduced motion and disabled checkout on desktop and mobile. Check that `GET /api/status` returns HTTP 200 with `payments.mode: "disabled"`, `payments.collecting: false` and `checkout.collecting: false`, and that `POST /api/pay/quote` and `POST /api/checkout/orders` return 503. Do not treat a successful static build as proof that the server function runs.
 
 Do not enable the Founding Pass merely by adding a link: price, payout account, deliverable and refund terms must be settled first. The payment adapter is separate work. Merchant setup, a working shielded payer, durable replay storage, verified binding between a payment and its buyer/request, and an authorized end-to-end check are still required for live collection. No seed, spend key, or viewing key belongs in this repository.
 

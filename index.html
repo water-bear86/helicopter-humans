@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Helicopter Humans | A privacy layer for your agent</title>
-    <meta name="description" content="Don't be a helicopter human. Let your agent have a little bit of privacy. Free in-browser log redactor. Agent privacy relay coming soon." />
+    <meta name="description" content="Don't be a helicopter human. Let your agent have a little bit of privacy. Free offline log preparation. Agent privacy relay coming soon." />
     <meta name="theme-color" content="#c6ff00" />
     <meta property="og:title" content="Helicopter Humans" />
     <meta property="og:description" content="A privacy layer for your agent. Don't be a helicopter human." />
@@ -100,7 +100,7 @@
             <g class="story-denied"><path d="M455 278l20 20m0-20l-20 20" stroke="#ff2e93" stroke-width="8" /><text x="390" y="338" class="scene-label" fill="#fdf6e3">NO SIGNAL.</text></g>
           </svg>
           <div class="story-controls">
-            <span class="story-hint">Scroll to shut the curtain</span>
+            <span class="story-hint">Helicopter theatre · Scroll to shut the curtain</span>
             <div class="story-progress" aria-hidden="true"><span></span></div>
             <button type="button" class="motion-toggle" aria-pressed="false" hidden>Pause motion</button>
             <a class="story-skip" href="#top">Skip to the good stuff</a>
@@ -171,7 +171,7 @@
       <section class="availability" aria-labelledby="avail-title">
         <h2 id="avail-title" class="sr-only">What is live</h2>
         <ul>
-          <li class="pill pill-live"><strong>Live</strong> Log redactor</li>
+          <li class="pill pill-live"><strong>Free</strong> Offline log tool</li>
           <li class="pill pill-demo"><strong>Demo</strong> classified.exe</li>
           <li class="pill pill-off"><strong>Coming soon</strong> Agent privacy relay</li>
         </ul>
@@ -179,15 +179,17 @@
 
       <section class="section" id="redactor" aria-labelledby="redactor-title">
         <div class="section-head">
-          <h2 id="redactor-title">Shred your agent's logs before a human reads them.</h2>
-          <p>Before that scratchpad lands in Slack, give it a trip through redact.exe. Scrub emails, API keys, bearer tokens, wallet addresses, private keys, card numbers, IPs and macOS/Linux home-folder usernames. All in your browser. Your logs stay with you.</p>
+          <h2 id="redactor-title">Less oversharing. Better bug reports.</h2>
+          <p>Keep the useful clues. Lose the API key, customer name and private aside. Download the single-file tool, open it locally, mask what matters and review the copy before it goes anywhere.</p>
+          <p><a class="btn btn-primary" href="/offline-redactor.html" download="helicopter-humans-offline.html">Download offline log tool</a></p>
+          <p class="fineprint">Save the HTML file and open the saved copy in your browser. No account or installation. The public preview below uses invented text only.</p>
         </div>
         <div class="window redactor">
-          <div class="titlebar"><span>redact.exe <span class="tag tag-live">LIVE</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <div class="titlebar"><span>redact.exe <span class="tag tag-demo">SAMPLE</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
           <div class="redactor-body">
             <div class="field">
-              <label for="redact-in">Evidence (paste here)</label>
-              <textarea id="redact-in" rows="9" spellcheck="false" placeholder="Paste agent logs here..."></textarea>
+              <label for="redact-in">Invented sample (read only)</label>
+              <textarea id="redact-in" rows="9" spellcheck="false" readonly placeholder="Load the sample to see the first pass."></textarea>
             </div>
             <div class="redactor-controls">
               <button type="button" class="btn btn-primary" id="redact-run">Shred it</button>
@@ -203,13 +205,13 @@
             </div>
           </div>
         </div>
-        <p class="fineprint">Pattern-based, so it can miss things (names, street addresses, seed phrases written as prose). Treat it as a first pass, not a guarantee.</p>
+        <p class="fineprint">The offline tool prepares an excerpt for sharing. It does not hide an agent's activity from its owner or protect its runtime. Patterns miss private prose and unfamiliar secrets; add custom phrases and review the entire output.</p>
       </section>
 
       <section class="section" id="demo" aria-labelledby="demo-title">
         <div class="section-head">
           <h2 id="demo-title">Meet the agent. Mind the door.</h2>
-          <p>Welcome to a very classified bedroom. Try <code>peek</code>, then <code>shut door</code>. The door has opinions. So does the agent. Bonus: <code>redact</code> actually shreds secrets.</p>
+          <p>Welcome to a very classified bedroom. Try <code>peek</code>, then <code>shut door</code>. The door has opinions. So does the agent. These commands use invented text; keep your own logs in the offline tool.</p>
         </div>
         <div class="window terminal">
           <div class="titlebar"><span>classified.exe <span class="tag tag-demo">DEMO</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
@@ -217,14 +219,14 @@
             <div id="term-out" class="term-out" role="log" aria-live="polite" aria-label="Terminal output"></div>
             <form id="term-form" class="term-form" autocomplete="off">
               <label for="term-in" class="prompt">agent@bedroom:~$</label>
-              <input id="term-in" name="command" type="text" spellcheck="false" autocapitalize="off" />
+              <input id="term-in" name="command" type="text" spellcheck="false" autocapitalize="off" maxlength="48" placeholder="Demo commands only. Try help." />
             </form>
           </div>
           <div class="chips" aria-label="Quick commands">
             <button type="button" class="chip" data-cmd="peek">peek</button>
             <button type="button" class="chip" data-cmd="shut door">shut door</button>
             <button type="button" class="chip" data-cmd="hover">hover</button>
-            <button type="button" class="chip" data-cmd="redact ping ada@example.com with key sk-proj-abcdefghijklmnop1234">redact</button>
+            <button type="button" class="chip" data-cmd="redact">redact</button>
             <button type="button" class="chip" data-cmd="status">status</button>
             <button type="button" class="chip" data-cmd="help">help</button>
           </div>
@@ -238,18 +240,18 @@
         <ol class="steps">
           <li class="card">
             <span class="step-no">01</span>
-            <h3>Paste</h3>
-            <p>Logs. Transcripts. That suspiciously candid scratchpad. Paste the bits you need to share.</p>
+            <h3>Pick an excerpt</h3>
+            <p>Open the downloaded tool locally. Bring only the lines needed for your bug report or teammate.</p>
           </li>
           <li class="card">
             <span class="step-no">02</span>
-            <h3>Shred</h3>
-            <p>Trade the usual secrets for tidy labels like <code>[EMAIL]</code>. One click. No upload. No helicopter clearance required.</p>
+            <h3>Mask the private bits</h3>
+            <p>Replace common patterns and add exact names or phrases the automatic pass cannot know.</p>
           </li>
           <li class="card">
             <span class="step-no">03</span>
-            <h3>Share</h3>
-            <p>Give it a quick once-over, then send the cleaned copy to your team, a bug report or a very nosy human.</p>
+            <h3>Review. Then share.</h3>
+            <p>Read and edit the entire preview, confirm your review, then export that copy. Clear the fields when finished.</p>
           </li>
           <li class="card card-soon">
             <span class="step-no">??</span>
@@ -267,7 +269,7 @@
           <div class="card plan">
             <h3>Redactor</h3>
             <p class="price">Free</p>
-            <p>Secrets out. Clean copy in. No account, no upload, no invoice.</p>
+            <p>Offline excerpt preparation. Custom masking, editable preview and reviewed export. No account or invoice.</p>
             <a class="btn" href="#redactor">Use it</a>
           </div>
           <div class="card plan plan-hot">
@@ -287,12 +289,12 @@
         </div>
         <div class="faq">
           <details>
-            <summary>Does the redactor send my logs anywhere?</summary>
-            <p>No. It is a regular expression pass in JavaScript on this page. There is no upload endpoint. You can load the page, go offline and it still works.</p>
+            <summary>Where do I use my own logs?</summary>
+            <p>In the downloaded HTML file, opened locally. Its script and styles are embedded, network connections are blocked, and it saves no session. This page only demonstrates invented text. Your browser, extensions and device still need to be trusted.</p>
           </details>
           <details>
             <summary>Will it catch everything?</summary>
-            <p>No. It catches well-shaped things: emails, common API key formats, bearer tokens, EVM and Zcash addresses, hex private keys, PEM keys, Luhn-valid card numbers, IPv4 addresses and home-folder usernames in macOS and Linux paths. It does not catch Windows paths, and it will miss names, addresses and anything that looks like ordinary words.</p>
+            <p>No. It recognises common credentials, emails, wallet addresses, key blocks, card numbers, IPv4 addresses and home-folder usernames. Names, addresses and private sentences can pass through unchanged. Add exact phrases, read the entire preview and remove anything else before export. It cannot undo a disclosure or stop someone with access to your agent.</p>
           </details>
           <details>
             <summary>When does the relay take off?</summary>

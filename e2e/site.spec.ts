@@ -41,9 +41,10 @@ test('terminal status matches the disabled ZEC prototype', async ({ page }) => {
   await expect(log).not.toContainText('x402')
 })
 
-test('redactor copy does not claim Windows path coverage', async ({ page }) => {
-  await expect(page.locator('#redactor')).toContainText('macOS/Linux home-folder usernames')
-  await expect(page.getByText('It does not catch Windows paths')).toBeAttached()
+test('public redactor is sample-only and points to the offline workflow', async ({ page }) => {
+  await expect(page.locator('#redact-in')).toHaveAttribute('readonly', '')
+  await expect(page.getByRole('link', { name: 'Download offline log tool' })).toHaveAttribute('download', 'helicopter-humans-offline.html')
+  await expect(page.locator('#redactor')).toContainText("does not hide an agent's activity")
 })
 
 test('checkout stays closed even when a checkout URL was set at build time', async ({ page }) => {
@@ -85,8 +86,8 @@ test('checkout is visibly unavailable when not configured and does not navigate'
   await expect(page.locator('#checkout-note')).toBeVisible()
 })
 
-test('availability distinguishes the live redactor and upcoming relay', async ({ page }) => {
-  await expect(page.locator('.pill-live')).toHaveText(/Live\s+Log redactor/)
+test('availability distinguishes the offline tool and upcoming relay', async ({ page }) => {
+  await expect(page.locator('.pill-live')).toHaveText(/Free\s+Offline log tool/)
   await expect(page.locator('.pill-off')).toHaveText(/Coming soon\s+Agent privacy relay/)
 })
 
