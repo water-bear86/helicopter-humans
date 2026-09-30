@@ -7,10 +7,12 @@
 // operator's terminal are testnet values with no monetary worth.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { looksLikeUnifiedAddress } from '../checkout/address.js'
 import { CIPHERPAY_TESTNET_ORIGIN, createCipherPayClient, type InvoiceProvider } from '../checkout/cipherpay.js'
+import { hashRecoveryCode, isRecoveryCode } from '../checkout/credential.js'
 import type { Offer } from '../checkout/offer.js'
 import { createCheckoutService, type OrderView } from '../checkout/service.js'
-import type { OrderStore } from '../checkout/store.js'
+import type { OrderSnapshot, OrderStore } from '../checkout/store.js'
 import { PostgresOrderStore } from '../checkout/store-postgres.js'
 import type { Env } from '../checkout/readiness.js'
 import { SANDBOX_ENV } from './preflight.js'
@@ -46,10 +48,31 @@ function service(deps: HarnessDeps) {
   return createCheckoutService({ store: deps.store, provider: deps.provider, offer: SANDBOX_OFFER, network: 'testnet', now: deps.now })
 }
 
-function readCode(file: string): string {
-  const saved = JSON.parse(readFileSync(file, 'utf8')) as { recoveryCode?: unknown }
-  if (typeof saved.recoveryCode !== 'string') throw new Error('order file has no recovery code')
-  return saved.recoveryCode
+export class SandboxRefusal extends Error {}
+
+// The order file is the operator's own, but its labels are only a first filter: the loaded order is
+// checked against the sandbox identity as well (checkSandboxOrder) before any provider call.
+export function readOrderFile(file: string): string {
+  let saved: unknown
+  try {
+    saved = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    throw new SandboxRefusal('order file is missing or not JSON')
+  }
+  const s = (typeof saved === 'object' && saved !== null ? saved : {}) as Record<string, unknown>
+  if (typeof s.recoveryCode !== 'string' || !isRecoveryCode(s.recoveryCode)) throw new SandboxRefusal('order file has no valid recovery code')
+  if (s.network !== 'testnet') throw new SandboxRefusal('order file is not labelled testnet')
+  if (s.offerVersion !== SANDBOX_OFFER.version) throw new SandboxRefusal('order file is not for the sandbox offer version')
+  return s.recoveryCode
+}
+
+// Refuses anything that is not a sandbox testnet order: another offer (such as a mainnet preorder),
+// another offer version, or any invoice whose address is not a testnet address. Runs before the
+// provider is contacted and before the store can change.
+export function checkSandboxOrder(s: OrderSnapshot): void {
+  if (s.order.offerId !== SANDBOX_OFFER.id || s.order.offerVersion !== SANDBOX_OFFER.version) throw new SandboxRefusal('order is not a sandbox testnet order')
+  if (s.receipt && (s.receipt.offerId !== SANDBOX_OFFER.id || s.receipt.offerVersion !== SANDBOX_OFFER.version)) throw new SandboxRefusal('order receipt is not for the sandbox offer')
+  if (!s.invoices.every((i) => looksLikeUnifiedAddress(i.paymentAddress, 'testnet'))) throw new SandboxRefusal('order has a non-testnet invoice address')
 }
 
 // What the operator records on the issue. No recovery code, no key, no database URL.
@@ -90,27 +113,84 @@ export async function createTestnetOrder(deps: HarnessDeps): Promise<{ evidence:
 }
 
 export async function refreshTestnetOrder(deps: HarnessDeps): Promise<Evidence> {
-  return evidence(await service(deps).refresh(readCode(deps.orderFile)))
+  const code = readOrderFile(deps.orderFile)
+  const snapshot = await deps.store.findByCredentialHash(hashRecoveryCode(code))
+  if (!snapshot) throw new SandboxRefusal('order not found in the sandbox database')
+  checkSandboxOrder(snapshot)
+  return evidence(await service(deps).refresh(code))
 }
 
-// Checks the operator's own `getrawtransaction <txid> 1` output (zcashd/Zallet verbose JSON) for a
-// fully shielded spend: no transparent inputs or outputs, no Sprout, and value only in Orchard or
-// Sapling. It reads a public transaction document, never a key. CipherPay detects Orchard payments,
-// so Orchard actions are required for this check to pass.
-export type ShieldedCheck = { fullyShielded: true; orchardActions: number; saplingSpends: number; saplingOutputs: number } | { fullyShielded: false; reasons: string[] }
+// An offline structural and privacy-policy check of the operator's own `getrawtransaction <txid> 1`
+// output (zcashd verbose schema, https://zcash.github.io/rpc/getrawtransaction.html). It reads a
+// public transaction document, never a key.
+//
+// Policy: a v5 (NU5) transaction whose value moves only inside the Orchard pool. No transparent
+// inputs or outputs, no Sprout, no Sapling spends or outputs and a zero Sapling balance, Orchard
+// spends and outputs both enabled, and an Orchard value balance that is exactly the (positive) fee.
+// Anything that moves value between pools reveals the amount crossing on chain, so it fails. Missing
+// or malformed fields fail. A transaction version this check does not know (v6 and later, for
+// example under a future network upgrade) is reported unverified, never passed.
+//
+// A pass is not proof that the transaction is in a block, that the operator's wallet made it, that it
+// paid a particular invoice, or that it is confirmed. Those need the provider's invoice record and
+// the operator's own wallet evidence (docs/SANDBOX_TEST.md).
+export type ShieldedCheck =
+  | { fullyShielded: true; verdict: 'orchard_only'; orchardActions: number; feeZatoshis: number }
+  | { fullyShielded: false; verdict: 'fail' | 'unverified'; reasons: string[] }
+
+const HEX32 = /^[0-9a-f]{64}$/
+const HEX = /^(?:[0-9a-f]{2})+$/
+const V5_GROUP_ID = '26a7270a'
+const ACTION_HEX32 = ['cv', 'nullifier', 'rk', 'cmx', 'ephemeralKey'] as const
+const ACTION_HEX = ['encCiphertext', 'outCiphertext', 'spendAuthSig'] as const
 
 export function checkShieldedTransaction(tx: unknown): ShieldedCheck {
-  if (typeof tx !== 'object' || tx === null) return { fullyShielded: false, reasons: ['not a transaction object'] }
+  const fail = (...reasons: string[]): ShieldedCheck => ({ fullyShielded: false, verdict: 'fail', reasons })
+  if (typeof tx !== 'object' || tx === null || Array.isArray(tx)) return fail('not a transaction object')
   const t = tx as Record<string, unknown>
-  const len = (v: unknown) => (Array.isArray(v) ? v.length : undefined)
+  const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+  const isZat = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v)
+
+  if (typeof t.version !== 'number' || !Number.isInteger(t.version)) return fail('version missing')
+  if (t.version > 5) return { fullyShielded: false, verdict: 'unverified', reasons: [`transaction version ${t.version} is not supported by this check`] }
+  if (t.version < 5) return fail('not a v5 transaction (no Orchard)')
+
   const reasons: string[] = []
-  if (typeof t.txid !== 'string' || !/^[0-9a-f]{64}$/.test(t.txid)) reasons.push('missing txid')
-  if (len(t.vin) !== 0) reasons.push(len(t.vin) === undefined ? 'vin missing' : 'has transparent inputs')
-  if (len(t.vout) !== 0) reasons.push(len(t.vout) === undefined ? 'vout missing' : 'has transparent outputs')
-  if ((len(t.vjoinsplit) ?? 0) > 0) reasons.push('has Sprout joinsplits')
-  const orchard = t.orchard as Record<string, unknown> | undefined
-  const orchardActions = len(orchard?.actions) ?? 0
-  if (orchardActions === 0) reasons.push('no Orchard actions (CipherPay detects Orchard payments)')
-  if (reasons.length) return { fullyShielded: false, reasons }
-  return { fullyShielded: true, orchardActions, saplingSpends: len(t.vShieldedSpend) ?? 0, saplingOutputs: len(t.vShieldedOutput) ?? 0 }
+  if (typeof t.txid !== 'string' || !HEX32.test(t.txid)) reasons.push('missing txid')
+  if (t.overwintered !== true || t.versiongroupid !== V5_GROUP_ID) reasons.push('not a v5 (NU5) transaction encoding')
+
+  const empty = (field: string, what: string) => {
+    const v = t[field]
+    if (!Array.isArray(v)) reasons.push(`${field} missing`)
+    else if (v.length) reasons.push(what)
+  }
+  empty('vin', 'has transparent inputs')
+  empty('vout', 'has transparent outputs')
+  empty('vjoinsplit', 'has Sprout joinsplits')
+  empty('vShieldedSpend', 'has Sapling spends (value crossing from Sapling)')
+  empty('vShieldedOutput', 'has Sapling outputs (value crossing into Sapling)')
+  if (t.valueBalanceZat !== undefined && !isZat(t.valueBalanceZat)) reasons.push('Sapling valueBalanceZat malformed')
+  else if ((t.valueBalanceZat ?? 0) !== 0) reasons.push('nonzero Sapling value balance')
+
+  const orchard = t.orchard
+  if (!isObject(orchard)) return fail(...reasons, 'no Orchard bundle')
+  const actions = orchard.actions
+  if (!Array.isArray(actions) || actions.length === 0) reasons.push('no Orchard actions')
+  else if (!actions.every((a) => isObject(a) && ACTION_HEX32.every((k) => typeof a[k] === 'string' && HEX32.test(a[k] as string)) && ACTION_HEX.every((k) => typeof a[k] === 'string' && HEX.test(a[k] as string)))) {
+    reasons.push('Orchard action fields malformed')
+  }
+  const flags = orchard.flags
+  if (!isObject(flags) || typeof flags.enableSpends !== 'boolean' || typeof flags.enableOutputs !== 'boolean') reasons.push('Orchard flags missing')
+  else {
+    if (!flags.enableSpends) reasons.push('Orchard spends disabled (value did not come from Orchard)')
+    if (!flags.enableOutputs) reasons.push('Orchard outputs disabled (value did not go to Orchard)')
+  }
+  // With no transparent, Sprout or Sapling value, the Orchard balance is the whole fee.
+  const fee = orchard.valueBalanceZat
+  if (!isZat(fee)) reasons.push('Orchard valueBalanceZat missing')
+  else if (fee <= 0) reasons.push('Orchard value balance is not a positive fee')
+  else if (orchard.valueBalance !== undefined && (typeof orchard.valueBalance !== 'number' || Math.round(orchard.valueBalance * 1e8) !== fee)) reasons.push('Orchard valueBalance disagrees with valueBalanceZat')
+
+  if (reasons.length) return fail(...reasons)
+  return { fullyShielded: true, verdict: 'orchard_only', orchardActions: (actions as unknown[]).length, feeZatoshis: fee as number }
 }

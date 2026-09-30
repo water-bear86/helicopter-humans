@@ -2,7 +2,7 @@
 // PostgreSQL section needs CHECKOUT_PG_TEST_URL (a disposable server, see docs/CHECKOUT.md) and is
 // reported as skipped without it.
 import { randomUUID } from 'node:crypto'
-import { mkdtempSync, readFileSync, statSync } from 'node:fs'
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import pg from 'pg'
@@ -10,9 +10,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { encodeBech32, encodeBech32m, shieldedAddressKind } from '../checkout/address'
 import { CIPHERPAY_ORIGIN, CIPHERPAY_TESTNET_ORIGIN, checkProviderOrigin, createCipherPayClient } from '../checkout/cipherpay'
 import { createFixtureCipherPay, FIXTURE_API_KEY, FIXTURE_ORIGIN, unpayableAddress } from '../checkout/fixture-cipherpay'
+import { hashRecoveryCode } from '../checkout/credential'
+import { DRAFT_OFFER } from '../checkout/offer'
 import { createCheckoutService } from '../checkout/service'
-import { MemoryOrderStore } from '../checkout/store'
+import { MemoryOrderStore, type OrderStore } from '../checkout/store'
 import { PostgresOrderStore } from '../checkout/store-postgres'
+import { runSandboxCommand } from './commands'
 import { checkShieldedTransaction, createTestnetOrder, refreshTestnetOrder, SANDBOX_OFFER, type HarnessDeps } from './harness'
 import { probeDatabase, runPreflight } from './preflight'
 
@@ -70,6 +73,49 @@ describe('sandbox preflight', () => {
     const offline = await runPreflight(COMPLETE, { offline: true })
     expect(offline.ready).toBe(false)
     expect(statuses(offline)).toMatchObject({ provider_testnet_health: 'skipped', database_schema: 'skipped' })
+  })
+})
+
+describe('provider health read is bounded', () => {
+  const health = async (fetchImpl: typeof fetch) => statuses(await runPreflight(COMPLETE, { fetch: fetchImpl, probeDatabase: sandboxDb })).provider_testnet_health
+
+  it('passes a small valid response', async () => {
+    expect(await health(async () => new Response('{"status":"ok"}', { status: 200, headers: { 'content-length': '15' } }))).toBe('pass')
+  })
+
+  it('refuses a declared oversized length without reading the body', async () => {
+    let pulls = 0
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls++
+        controller.enqueue(new TextEncoder().encode('{"status":"ok"}'))
+        controller.close()
+      },
+      cancel() {
+        cancelled = true
+      },
+    }, { highWaterMark: 0 })
+    expect(await health(async () => new Response(body, { status: 200, headers: { 'content-length': String(2 * 1024 * 1024) } }))).toBe('fail')
+    expect({ pulls, cancelled }).toEqual({ pulls: 0, cancelled: true })
+  })
+
+  it('stops a chunked stream at the limit and cancels it', async () => {
+    let sent = 0
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = new TextEncoder().encode(sent === 0 ? '{"status":"ok"}' + ' '.repeat(1009) : ' '.repeat(1024))
+        sent += chunk.byteLength
+        controller.enqueue(chunk)
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    expect(await health(async () => new Response(body, { status: 200 }))).toBe('fail')
+    expect(cancelled).toBe(true)
+    expect(sent).toBeLessThanOrEqual(8 * 1024)
   })
 })
 
@@ -154,28 +200,158 @@ describe('testnet harness through the accepted order service', () => {
   })
 })
 
-describe('fully shielded transaction check', () => {
-  const txid = 'ab'.repeat(32)
-  it('accepts an Orchard-only transaction with no transparent parts', () => {
-    expect(checkShieldedTransaction({ txid, vin: [], vout: [], vjoinsplit: [], vShieldedSpend: [], vShieldedOutput: [], orchard: { actions: [{}, {}] } })).toEqual({
-      fullyShielded: true,
-      orchardActions: 2,
-      saplingSpends: 0,
-      saplingOutputs: 0,
-    })
+// A confirmed mainnet preorder with a valid receipt, in the same store the sandbox would open.
+async function mainnetFulfilledOrder(store: OrderStore) {
+  const mainnet = createFixtureCipherPay()
+  const svc = createCheckoutService({ store, provider: createCipherPayClient({ origin: FIXTURE_ORIGIN, apiKey: FIXTURE_API_KEY, fetch: mainnet.fetch, allowLoopback: true }), offer: DRAFT_OFFER })
+  const { recoveryCode } = await svc.createOrder()
+  await svc.ensureInvoice(recoveryCode)
+  const inv = [...mainnet.invoices.values()][0]
+  mainnet.pay(inv.id, inv.price_zatoshis)
+  mainnet.confirm(inv.id)
+  expect((await svc.refresh(recoveryCode)).state).toBe('fulfilled')
+  return recoveryCode
+}
+
+async function unchanged(store: OrderStore, code: string) {
+  const s = await store.findByCredentialHash(hashRecoveryCode(code))
+  return { state: s?.order.state, receiptRevoked: Boolean(s?.receipt?.revokedAt) }
+}
+
+function writeOrderFile(file: string, content: Record<string, unknown>) {
+  writeFileSync(file, JSON.stringify(content), { mode: 0o600 })
+}
+
+describe('sandbox isolation: refresh never touches a non-sandbox order', () => {
+  const ready = (env: Record<string, string | undefined>) => runPreflight(env, { fetch: healthy, probeDatabase: sandboxDb })
+
+  it.each([
+    ['hosted runtime', { VERCEL: '1' }],
+    ['production NODE_ENV', { NODE_ENV: 'production' }],
+    ['mainnet network', { SANDBOX_NETWORK: 'mainnet' }],
+    ['no disposable confirmation', { SANDBOX_DATABASE_IS_DISPOSABLE: undefined }],
+    ['production database URL', { CHECKOUT_DATABASE_URL: DB }],
+  ])('the CLI refuses refresh before opening any store: %s', async (_label, override) => {
+    const makeDeps = vi.fn()
+    const code = await runSandboxCommand('refresh', [], { env: { ...COMPLETE, ...override }, orderFile: '/nonexistent/order.json', preflight: ready, makeDeps, out: () => {} })
+    expect(code).toBe(1)
+    expect(makeDeps).not.toHaveBeenCalled()
+  })
+
+  it('the CLI refuses refresh against a database with the mainnet-only constraint', async () => {
+    const makeDeps = vi.fn()
+    const productionSchema = (env: Record<string, string | undefined>) => runPreflight(env, { fetch: healthy, probeDatabase: async () => ({ checkoutTables: true, testnetOnlyAddresses: false }) })
+    expect(await runSandboxCommand('refresh', [], { env: COMPLETE, orderFile: '/nonexistent/order.json', preflight: productionSchema, makeDeps, out: () => {} })).toBe(1)
+    expect(makeDeps).not.toHaveBeenCalled()
+  })
+
+  it.each(['mainnet', 'testnet'])('with a ready preflight, the CLI still refuses a mainnet order whose file says %s', async (label) => {
+    const deps = fixtureDeps()
+    const code = await mainnetFulfilledOrder(deps.store)
+    writeOrderFile(deps.orderFile, { recoveryCode: code, network: label, offerVersion: SANDBOX_OFFER.version })
+    const errors: string[] = []
+    const exit = await runSandboxCommand('refresh', [], { env: COMPLETE, orderFile: deps.orderFile, preflight: ready, makeDeps: () => deps, out: () => {}, err: (l) => errors.push(l) })
+    expect(exit).toBe(1)
+    expect(errors.join('\n')).toMatch(/refused/)
+    expect(errors.join('\n')).not.toContain(code)
+    expect(deps.fixture.calls.get).toBe(0)
+    expect(await unchanged(deps.store, code)).toEqual({ state: 'fulfilled', receiptRevoked: false })
   })
 
   it.each([
-    [{ txid, vin: [{}], vout: [], orchard: { actions: [{}] } }, 'has transparent inputs'],
-    [{ txid, vin: [], vout: [{}], orchard: { actions: [{}] } }, 'has transparent outputs'],
-    [{ txid, vout: [], orchard: { actions: [{}] } }, 'vin missing'],
-    [{ txid, vin: [], vout: [], vjoinsplit: [{}], orchard: { actions: [{}] } }, 'has Sprout joinsplits'],
-    [{ txid, vin: [], vout: [], vShieldedOutput: [{}] }, 'no Orchard actions (CipherPay detects Orchard payments)'],
-    [{ vin: [], vout: [], orchard: { actions: [{}] } }, 'missing txid'],
-  ])('rejects %j', (tx, reason) => {
-    const result = checkShieldedTransaction(tx)
-    expect(result.fullyShielded).toBe(false)
+    ['network label', { network: 'mainnet' }],
+    ['missing network', { network: undefined }],
+    ['offer version', { offerVersion: DRAFT_OFFER.version }],
+    ['recovery code', { recoveryCode: 42 }],
+  ])('the helper refuses a sandbox order file with the wrong %s, with no provider read', async (_label, override) => {
+    const deps = fixtureDeps()
+    await createTestnetOrder(deps)
+    const saved = JSON.parse(readFileSync(deps.orderFile, 'utf8'))
+    const file = join(mkdtempSync(join(tmpdir(), 'hh-sandbox-')), 'order.json')
+    writeOrderFile(file, { ...saved, ...override })
+    const reads = deps.fixture.calls.get
+    await expect(refreshTestnetOrder({ ...deps, orderFile: file })).rejects.toThrow(/order file/)
+    expect(deps.fixture.calls.get).toBe(reads)
+  })
+
+  it('a genuine sandbox order still refreshes through the CLI', async () => {
+    const deps = fixtureDeps()
+    await createTestnetOrder(deps)
+    const inv = [...deps.fixture.invoices.values()][0]
+    deps.fixture.pay(inv.id, inv.price_zatoshis)
+    deps.fixture.confirm(inv.id)
+    const lines: string[] = []
+    expect(await runSandboxCommand('refresh', [], { env: COMPLETE, orderFile: deps.orderFile, preflight: ready, makeDeps: () => deps, out: (l) => lines.push(l) })).toBe(0)
+    expect(lines.join('\n')).toContain('"state": "fulfilled"')
+  })
+})
+
+// Field names and shapes follow the zcashd verbose schema (getrawtransaction <txid> 1). Values are
+// invented; this is not a real chain transaction.
+function hex(bytes: number, seed: number) {
+  return Array.from({ length: bytes }, (_, i) => ((seed * 31 + i * 7) % 256).toString(16).padStart(2, '0')).join('')
+}
+function orchardAction(seed: number) {
+  return {
+    cv: hex(32, seed), nullifier: hex(32, seed + 1), rk: hex(32, seed + 2), cmx: hex(32, seed + 3), ephemeralKey: hex(32, seed + 4),
+    encCiphertext: hex(580, seed + 5), outCiphertext: hex(80, seed + 6), spendAuthSig: hex(64, seed + 7),
+  }
+}
+function orchardOnlyTx() {
+  return {
+    txid: 'ab'.repeat(32), authdigest: 'cd'.repeat(32), size: 9165, overwintered: true, version: 5, versiongroupid: '26a7270a', locktime: 0, expiryheight: 3100000,
+    vin: [], vout: [], vjoinsplit: [], valueBalance: 0, valueBalanceZat: 0, vShieldedSpend: [], vShieldedOutput: [],
+    orchard: { actions: [orchardAction(1), orchardAction(2)], valueBalance: 0.0001, valueBalanceZat: 10_000, flags: { enableSpends: true, enableOutputs: true }, anchor: hex(32, 9), proof: hex(64, 10), bindingSig: hex(64, 11) },
+  }
+}
+type Tx = ReturnType<typeof orchardOnlyTx>
+const saplingSpend = { cv: hex(32, 20), anchor: hex(32, 21), nullifier: hex(32, 22), rk: hex(32, 23), proof: hex(192, 24), spendAuthSig: hex(64, 25) }
+const saplingOutput = { cv: hex(32, 30), cmu: hex(32, 31), ephemeralKey: hex(32, 32), encCiphertext: hex(580, 33), outCiphertext: hex(80, 34), proof: hex(192, 35) }
+
+describe('shielded transaction policy check (offline, Orchard only)', () => {
+  it('passes a v5 Orchard-only spend whose Orchard balance is the fee', () => {
+    expect(checkShieldedTransaction(orchardOnlyTx())).toEqual({ fullyShielded: true, verdict: 'orchard_only', orchardActions: 2, feeZatoshis: 10_000 })
+  })
+
+  const variants: [string, (t: Tx) => unknown, string][] = [
+    ['Sapling to Orchard pool crossing', (t) => ({ ...t, vShieldedSpend: [saplingSpend], valueBalance: 1, valueBalanceZat: 100_000_000, orchard: { ...t.orchard, valueBalance: -0.9999, valueBalanceZat: -99_990_000, flags: { enableSpends: false, enableOutputs: true } } }), 'has Sapling spends (value crossing from Sapling)'],
+    ['Orchard to Sapling pool crossing', (t) => ({ ...t, vShieldedOutput: [saplingOutput], valueBalanceZat: -50_000, orchard: { ...t.orchard, valueBalance: 0.0006, valueBalanceZat: 60_000 } }), 'has Sapling outputs (value crossing into Sapling)'],
+    ['nonzero Sapling balance', (t) => ({ ...t, valueBalanceZat: 5 }), 'nonzero Sapling value balance'],
+    ['Orchard spends disabled', (t) => ({ ...t, orchard: { ...t.orchard, flags: { enableSpends: false, enableOutputs: true } } }), 'Orchard spends disabled (value did not come from Orchard)'],
+    ['Orchard flags missing', (t) => ({ ...t, orchard: { ...t.orchard, flags: undefined } }), 'Orchard flags missing'],
+    ['negative Orchard balance', (t) => ({ ...t, orchard: { ...t.orchard, valueBalance: -0.0001, valueBalanceZat: -10_000 } }), 'Orchard value balance is not a positive fee'],
+    ['Orchard balance missing', (t) => ({ ...t, orchard: { ...t.orchard, valueBalanceZat: undefined } }), 'Orchard valueBalanceZat missing'],
+    ['disagreeing Orchard balances', (t) => ({ ...t, orchard: { ...t.orchard, valueBalance: 1 } }), 'Orchard valueBalance disagrees with valueBalanceZat'],
+    ['transparent input', (t) => ({ ...t, vin: [{ txid: 'ef'.repeat(32), vout: 0 }] }), 'has transparent inputs'],
+    ['transparent output', (t) => ({ ...t, vout: [{ valueZat: 1 }] }), 'has transparent outputs'],
+    ['Sprout joinsplit', (t) => ({ ...t, vjoinsplit: [{}] }), 'has Sprout joinsplits'],
+    ['vin missing', (t) => ({ ...t, vin: undefined }), 'vin missing'],
+    ['Sapling spends missing', (t) => ({ ...t, vShieldedSpend: undefined }), 'vShieldedSpend missing'],
+    ['malformed action', (t) => ({ ...t, orchard: { ...t.orchard, actions: [{}, {}] } }), 'Orchard action fields malformed'],
+    ['no actions', (t) => ({ ...t, orchard: { ...t.orchard, actions: [] } }), 'no Orchard actions'],
+    ['no Orchard bundle', (t) => ({ ...t, orchard: undefined }), 'no Orchard bundle'],
+    ['bad txid', (t) => ({ ...t, txid: 'xyz' }), 'missing txid'],
+    ['wrong version group', (t) => ({ ...t, versiongroupid: '892f2085' }), 'not a v5 (NU5) transaction encoding'],
+    ['v4 transaction', (t) => ({ ...t, version: 4 }), 'not a v5 transaction (no Orchard)'],
+    ['version missing', (t) => ({ ...t, version: undefined }), 'version missing'],
+  ]
+  it.each(variants)('fails: %s', (_label, change, reason) => {
+    const result = checkShieldedTransaction(change(orchardOnlyTx()))
+    expect(result).toMatchObject({ fullyShielded: false, verdict: 'fail' })
     expect(!result.fullyShielded && result.reasons).toContain(reason)
+  })
+
+  it('reports an unknown later transaction version as unverified, not passed', () => {
+    expect(checkShieldedTransaction({ ...orchardOnlyTx(), version: 6 })).toMatchObject({ fullyShielded: false, verdict: 'unverified' })
+  })
+
+  it.each([null, [], 'tx', 5])('fails a non-object %j', (tx) => {
+    expect(checkShieldedTransaction(tx)).toMatchObject({ fullyShielded: false, verdict: 'fail' })
+  })
+
+  it('check-tx exits 1 on malformed JSON and 0 on the Orchard-only fixture', async () => {
+    expect(await runSandboxCommand('check-tx', [], { env: {}, orderFile: '', readStdin: () => '{not json', out: () => {} })).toBe(1)
+    expect(await runSandboxCommand('check-tx', [], { env: {}, orderFile: '', readStdin: () => JSON.stringify(orchardOnlyTx()), out: () => {} })).toBe(0)
   })
 })
 
@@ -212,6 +388,38 @@ describe.skipIf(!PG_URL)('sandbox database (PostgreSQL)', () => {
     await admin.query(`BEGIN; ${read('../../db/sandbox/0001_testnet_only.sql')}; COMMIT;`)
     await admin.end()
     expect(await probeDatabase(scoped())).toEqual({ checkoutTables: true, testnetOnlyAddresses: true })
+  })
+
+  it('the CLI refuses refresh against a production-shaped database, using the real probe', async () => {
+    const other = `sandbox_prod_${randomUUID().replaceAll('-', '')}`
+    const admin = new pg.Client({ connectionString: PG_URL })
+    await admin.connect()
+    await admin.query(`CREATE SCHEMA ${other}; SET search_path TO ${other}`)
+    await admin.query(`BEGIN; ${read('../../db/migrations/0001_checkout_orders.sql')}; COMMIT;`)
+    try {
+      const url = new URL(PG_URL!)
+      url.searchParams.set('options', `-c search_path=${other}`)
+      const env = { ...COMPLETE, SANDBOX_DATABASE_URL: url.toString() }
+      const makeDeps = vi.fn()
+      const exit = await runSandboxCommand('refresh', [], { env, orderFile: '/nonexistent/order.json', preflight: (e) => runPreflight(e, { fetch: healthy }), makeDeps, out: () => {} })
+      expect(exit).toBe(1)
+      expect(makeDeps).not.toHaveBeenCalled()
+    } finally {
+      await admin.query(`DROP SCHEMA ${other} CASCADE`)
+      await admin.end()
+    }
+  })
+
+  it('the helper refuses a non-sandbox order in the durable sandbox store, leaving it unchanged', async () => {
+    const pool = new pg.Pool({ connectionString: scoped(), max: 3 })
+    pools.push(pool)
+    const deps = fixtureDeps(new PostgresOrderStore({ pool }))
+    const { recoveryCode } = await createCheckoutService({ store: deps.store, provider: deps.provider, offer: DRAFT_OFFER }).createOrder()
+    writeOrderFile(deps.orderFile, { recoveryCode, network: 'testnet', offerVersion: SANDBOX_OFFER.version })
+    const before = await deps.store.findByCredentialHash(hashRecoveryCode(recoveryCode))
+    await expect(refreshTestnetOrder(deps)).rejects.toThrow(/not a sandbox testnet order/)
+    expect(deps.fixture.calls.get).toBe(0)
+    expect(await deps.store.findByCredentialHash(hashRecoveryCode(recoveryCode))).toEqual(before)
   })
 
   it('runs the harness against the durable store, and the sandbox schema refuses a mainnet invoice address', async () => {

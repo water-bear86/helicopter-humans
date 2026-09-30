@@ -5,7 +5,7 @@
 // The sandbox harness is testnet only. There is no mainnet mode and no network fallback here; the
 // mainnet payment test is a separate, explicitly authorised step (docs/SANDBOX_TEST.md).
 import pg from 'pg'
-import { CIPHERPAY_TESTNET_ORIGIN } from '../checkout/cipherpay.js'
+import { BodyTooLarge, CIPHERPAY_TESTNET_ORIGIN, readBounded } from '../checkout/cipherpay.js'
 import { isHosted, type Env } from '../checkout/readiness.js'
 
 export type CheckStatus = 'pass' | 'fail' | 'missing' | 'skipped'
@@ -87,10 +87,19 @@ export async function probeDatabase(connectionString: string): Promise<DatabaseP
   }
 }
 
+const HEALTH_MAX_BYTES = 4096
+
 async function providerHealth(doFetch: typeof fetch): Promise<Check> {
   try {
+    // One deadline covers the connection and the body; the body is read up to HEALTH_MAX_BYTES only.
     const res = await doFetch(`${CIPHERPAY_TESTNET_ORIGIN}/api/health`, { redirect: 'error', signal: AbortSignal.timeout(5000), headers: { accept: 'application/json' } })
-    const text = (await res.text()).slice(0, 4096)
+    let text: string
+    try {
+      text = await readBounded(res, HEALTH_MAX_BYTES)
+    } catch (error) {
+      if (!(error instanceof BodyTooLarge)) throw error
+      return { id: 'provider_testnet_health', status: 'fail', detail: `testnet API health response exceeded ${HEALTH_MAX_BYTES} bytes` }
+    }
     let body: unknown
     try {
       body = JSON.parse(text)

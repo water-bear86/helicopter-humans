@@ -45,8 +45,8 @@ Server-side, local only. Put these in `.env.sandbox` (gitignored, read by `npm r
 npm run sandbox -- preflight              # read-only; exit 0 only if every check passes
 npm run sandbox -- preflight --offline    # configuration only; always NOT READY
 npm run sandbox -- create --confirm-testnet   # preflight again, then ONE testnet order + invoice
-npm run sandbox -- refresh                # one provider read of that order; prints evidence
-npm run sandbox -- check-tx < tx.json     # checks getrawtransaction output is fully shielded
+npm run sandbox -- refresh                # preflight again, then one provider read of that sandbox order
+npm run sandbox -- check-tx < tx.json     # offline Orchard-only policy check of getrawtransaction output
 ```
 
 The preflight checks, in order:
@@ -56,10 +56,19 @@ The preflight checks, in order:
 3. Key present and shaped, and not the production key.
 4. Database URL present, TLS or loopback, and not the production URL.
 5. Operator's disposable flag.
-6. One unauthenticated `GET https://api.testnet.cipherpay.app/api/health` (5 s).
+6. One unauthenticated `GET https://api.testnet.cipherpay.app/api/health`: 5 s overall, no redirects, body read up to 4096 bytes. A larger declared length is refused before reading, and a longer stream is cancelled at the limit.
 7. One read-only transaction on the database (5 s) confirming the five checkout tables and the testnet-only address constraint.
 
-It prints variable names and pass/fail, never values. Anything missing, skipped or failing makes it **NOT READY**, and `create` then creates nothing.
+It prints variable names and pass/fail, never values. Anything missing, skipped or failing makes it **NOT READY**.
+
+`create` and `refresh` both run this full preflight first, because both open the order store. When it is not ready, no store is opened and the provider is not contacted.
+
+`refresh` then checks the order before any provider read or change:
+
+- The order file must hold a well-formed recovery code, `network: "testnet"` and the sandbox offer version. The file's labels are only a first filter.
+- The loaded order must be the sandbox offer and version. Any receipt must be for that offer, and every invoice address must be a testnet `utest1` address.
+
+A mainnet preorder, or any other order, is refused whatever its file says. It gets no provider read, and its state and receipt are unchanged.
 
 `create` refuses to run if an order file already exists: one attempt per file. It writes the recovery code to the 0600 file before requesting the invoice, and never prints it. It prints the testnet payment URI and an evidence JSON with state, amount, address, expiry, received amount and receipt, but no code, key or URL. There is no polling and no background process. Run `refresh` by hand.
 
@@ -106,13 +115,34 @@ The operator runs the wallet on their own machine. This app never opens a wallet
 - **Zallet** (zcash/wallet, `0.1.0-beta.3`, beta): `z_sendmany` with `privacy_policy` `FullPrivacy` (its default). Many RPCs are not implemented yet.
 - **Testnet funds:** CipherPay's named faucet was unreachable on 30 September. Getting testnet ZEC is an open operator step.
 
-To prove the spend was fully shielded, fetch the public transaction as verbose JSON from a node or wallet the operator trusts (`getrawtransaction <txid> 1`), then run `npm run sandbox -- check-tx < tx.json`. It passes only when all of these hold:
+Pay from Orchard funds only. A payment that moves value between shielded pools (Sapling to Orchard, or back) reveals the amount crossing on chain (Zcash protocol specification; ZIP 318), so it does not meet this policy. A wallet holding only Sapling funds must first shield them into Orchard in a separate, earlier transaction.
 
-- `vin` and `vout` are present and empty (no transparent inputs or outputs)
-- there are no Sprout `vjoinsplit`
-- there is at least one Orchard action (CipherPay detects Orchard)
+### `check-tx`: an offline policy check
 
-The explorer `testnet.cipherscan.app` shows the same fields. A receiving address or a wallet's release notes alone do not prove a fully shielded spend.
+Fetch the public transaction as verbose JSON from a node or wallet the operator trusts (`getrawtransaction <txid> 1`, zcashd schema: https://zcash.github.io/rpc/getrawtransaction.html). Then run `npm run sandbox -- check-tx < tx.json`. It reports `orchard_only` (exit 0) only when all of these hold:
+
+- It is a v5 (NU5) transaction: `version` 5, `overwintered` true, `versiongroupid` `26a7270a`. Orchard is active on both mainnet and testnet since NU5.
+- `vin`, `vout` and `vjoinsplit` are present and empty: no transparent value and no Sprout.
+- `vShieldedSpend` and `vShieldedOutput` are present and empty, and any Sapling `valueBalanceZat` is 0: no Sapling value.
+- `orchard.actions` is non-empty, and every action carries the schema's hex fields.
+- `orchard.flags.enableSpends` and `enableOutputs` are both true.
+- `orchard.valueBalanceZat` is a positive integer. With nothing else moving value, it is the fee. `valueBalance` in ZEC must agree with it.
+
+Anything missing or malformed, and any cross-pool transfer, is `fail`. A transaction version it does not know is `unverified`, never a pass: v6 and later, for example after a future network upgrade. Both exit 1.
+
+This checks the structure of a document and the privacy policy. It does not prove:
+
+- that the transaction is in a block, or confirmed
+- that the operator's wallet made it
+- that it paid this invoice
+
+Those come separately, and all are required:
+
+- the provider's invoice record (the `refresh` evidence showing the amount received and confirmation)
+- the operator's own wallet record of the send
+- the txid being found by the operator's trusted node or the explorer `testnet.cipherscan.app`
+
+A receiving address or a wallet's release notes alone prove none of this.
 
 ## After the testnet run
 

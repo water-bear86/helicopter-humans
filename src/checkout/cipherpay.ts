@@ -99,11 +99,16 @@ export function checkProviderOrigin(origin: string, allowLoopback = false, netwo
   throw new Error('provider origin is not the pinned CipherPay API')
 }
 
-class BodyTooLarge extends Error {}
+export class BodyTooLarge extends Error {}
 
-async function readBounded(response: Response, maxBytes: number): Promise<string> {
+// Reads at most `maxBytes`: refuses a larger declared length up front and cancels a stream that runs
+// past the limit, so an oversized body is never read in full.
+export async function readBounded(response: Response, maxBytes: number): Promise<string> {
   const declared = Number(response.headers.get('content-length'))
-  if (Number.isFinite(declared) && declared > maxBytes) throw new BodyTooLarge()
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await response.body?.cancel().catch(() => undefined)
+    throw new BodyTooLarge()
+  }
   if (!response.body) return ''
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
