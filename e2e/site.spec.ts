@@ -46,6 +46,35 @@ test('redactor copy does not claim Windows path coverage', async ({ page }) => {
   await expect(page.getByText('It does not catch Windows paths')).toBeAttached()
 })
 
+test('checkout stays closed even when a checkout URL was set at build time', async ({ page }) => {
+  // playwright.config.ts builds with VITE_CHECKOUT_URL=https://pay.example.com/should-never-open.
+  const checkout = page.locator('#checkout-btn')
+  await expect(checkout).toHaveAttribute('href', '#pricing')
+  expect(await page.content()).not.toContain('pay.example.com')
+  const scripts = await page.evaluate(async () => {
+    const urls = [...document.querySelectorAll<HTMLScriptElement>('script[src]')].map((s) => s.src)
+    return (await Promise.all(urls.map((u) => fetch(u).then((r) => r.text())))).join('\n')
+  })
+  expect(scripts).not.toContain('pay.example.com')
+})
+
+test('the free redactor never calls a server route', async ({ page }) => {
+  const api: string[] = []
+  page.on('request', (req) => {
+    if (new URL(req.url()).pathname.startsWith('/api/')) api.push(req.url())
+  })
+  await page.getByRole('button', { name: 'Load embarrassing sample' }).click()
+  await page.getByRole('button', { name: 'Shred it' }).click()
+  await expect(page.locator('#redact-summary')).toContainText('Shredded')
+  expect(api).toEqual([])
+})
+
+test('the checkout preview page is closed on the static build', async ({ page }) => {
+  await page.goto('/checkout.html')
+  await expect(page.locator('#co-mode')).toContainText('Checkout is closed.')
+  await expect(page.locator('#co-app')).toBeHidden()
+})
+
 test('checkout is visibly unavailable when not configured and does not navigate', async ({ page }) => {
   const checkout = page.locator('#checkout-btn')
   await expect(checkout).toHaveAttribute('aria-disabled', 'true')

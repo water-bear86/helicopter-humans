@@ -109,17 +109,10 @@ document.querySelectorAll<HTMLButtonElement>('.chip[data-cmd]').forEach((chip) =
 
 // ---- Pricing / checkout -------------------------------------------------
 
-const checkoutBtn = $<HTMLAnchorElement>('checkout-btn')
+// Checkout is closed on every build. The invoice checkout (checkout.html) is a local fixture preview
+// until its readiness blockers are cleared in code; no build variable can switch this button on.
 if (config.priceLabel) $('price-label').textContent = config.priceLabel
-if (config.checkoutUrl) {
-  checkoutBtn.href = config.checkoutUrl
-  checkoutBtn.removeAttribute('aria-disabled')
-  checkoutBtn.rel = 'noopener'
-  checkoutBtn.textContent = 'Get the Founding Pass'
-  $('checkout-note').textContent = 'Opens our payment provider in this tab. Early access only; the relay is not live.'
-} else {
-  checkoutBtn.addEventListener('click', (event) => event.preventDefault())
-}
+$<HTMLAnchorElement>('checkout-btn').addEventListener('click', (event) => event.preventDefault())
 
 // ---- Helicopter --------------------------------------------------------
 

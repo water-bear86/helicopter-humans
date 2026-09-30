@@ -19,6 +19,11 @@
   box-sizing: border-box;
 }
 
+/* Layout classes must never un-hide an element the page has hidden. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -746,5 +751,223 @@ textarea {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* ---- Checkout preview (checkout.html) ---- */
+
+.checkout .section-head h1 {
+  font-size: clamp(2rem, 6vw, 3.6rem);
+}
+
+.banner {
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  font-weight: 700;
+}
+
+.banner-off {
+  background: #d9d3c3;
+}
+
+.banner-fixture {
+  background: repeating-linear-gradient(-45deg, var(--acid) 0 18px, #e8ff8a 18px 36px);
+}
+
+#co-blockers-wrap {
+  margin: 0 0 2rem;
+  padding: 1rem 1.25rem;
+  max-width: 72ch;
+  border: 3px solid var(--ink);
+  background: var(--cream);
+}
+
+.blockers {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.checkout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 2rem;
+  align-items: start;
+  margin-bottom: 2rem;
+}
+
+.checkout-grid .offer {
+  grid-row: span 2;
+}
+
+.panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.inline input {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.checkout input[type='text'],
+.checkout input[type='password'] {
+  padding: 0.7rem;
+  border: var(--border);
+  background: #fff;
+  color: var(--ink);
+  font: 0.95rem/1.4 var(--mono);
+}
+
+.checkout label {
+  font-weight: 700;
+}
+
+.code-box {
+  padding: 1rem;
+  border: var(--border);
+  background: var(--acid);
+}
+
+.code-box label {
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.check input {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+#co-status-title {
+  margin: 0;
+}
+
+.state-pill {
+  justify-self: start;
+  margin: 0;
+  padding: 0.2rem 0.7rem;
+  border: 3px solid var(--ink);
+  background: var(--cream);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.state-pill[data-state='awaiting_payment'],
+.state-pill[data-state='payment_detected'] {
+  background: var(--cyan);
+}
+
+.state-pill[data-state='fulfilled'] {
+  background: var(--acid);
+}
+
+.state-pill[data-state='needs_resolution'],
+.state-pill[data-state='reconciliation_required'],
+.state-pill[data-state='quarantined'],
+.state-pill[data-state='quote_rejected'] {
+  background: var(--pink);
+}
+
+.status {
+  margin: 0;
+  font-weight: 700;
+}
+
+.notice {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 3px solid var(--ink);
+  background: #ffe1ef;
+}
+
+.pay {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.pay dt {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.pay dd {
+  margin: 0;
+}
+
+.address {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.fee {
+  padding: 0.6rem 0.8rem;
+  border: 3px dashed var(--ink);
+  font-size: 0.9rem;
+}
+
+.receipt {
+  padding: 1rem;
+  border: var(--border);
+  background: var(--acid);
+}
+
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.btn-small {
+  padding: 0.5rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.refund label {
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+.fixture {
+  margin: 0;
+  padding: 1rem;
+  border: 4px dashed var(--pink);
+}
+
+.fixture legend {
+  padding: 0 0.4rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+@media (max-width: 800px) {
+  .checkout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .checkout-grid .offer {
+    grid-row: auto;
+  }
+
+  .pay {
+    grid-template-columns: 1fr;
   }
 }
