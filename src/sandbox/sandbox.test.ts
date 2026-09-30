@@ -55,10 +55,21 @@ describe('sandbox preflight', () => {
     [{ CHECKOUT_DATABASE_URL: DB }, 'database_url'],
     [{ SANDBOX_DATABASE_URL: 'postgres://u:p@db.example.com/x' }, 'database_url'],
     [{ SANDBOX_DATABASE_IS_DISPOSABLE: 'true' }, 'database_disposable'],
-  ])('refuses %j (%s)', async (override, id) => {
-    const report = await runPreflight({ ...COMPLETE, ...override }, { fetch: healthy, probeDatabase: sandboxDb })
+  ])('refuses %j (%s) without contacting the database or the provider', async (override, id) => {
+    const health = vi.fn(healthy)
+    const db = vi.fn(sandboxDb)
+    const report = await runPreflight({ ...COMPLETE, ...override }, { fetch: health, probeDatabase: db })
     expect(report.ready).toBe(false)
     expect(statuses(report)[id]).toBe('fail')
+    expect(statuses(report)).toMatchObject({ database_schema: 'skipped', provider_testnet_health: 'skipped' })
+    expect({ health: health.mock.calls.length, db: db.mock.calls.length }).toEqual({ health: 0, db: 0 })
+  })
+
+  it('does not contact the provider when the database check fails', async () => {
+    const health = vi.fn(healthy)
+    const report = await runPreflight(COMPLETE, { fetch: health, probeDatabase: async () => ({ checkoutTables: true, testnetOnlyAddresses: false }) })
+    expect(statuses(report)).toMatchObject({ database_schema: 'fail', provider_testnet_health: 'skipped' })
+    expect(health).not.toHaveBeenCalled()
   })
 
   it('refuses an unhealthy provider, a production-shaped database, and an offline run', async () => {
@@ -66,6 +77,7 @@ describe('sandbox preflight', () => {
     expect(statuses(await runPreflight(COMPLETE, { fetch: down, probeDatabase: sandboxDb })).provider_testnet_health).toBe('fail')
     const mainnetDb = vi.fn(async () => ({ checkoutTables: true, testnetOnlyAddresses: false }))
     expect(statuses(await runPreflight(COMPLETE, { fetch: healthy, probeDatabase: mainnetDb })).database_schema).toBe('fail')
+    expect(statuses(await runPreflight(COMPLETE, { fetch: healthy, probeDatabase: async () => ({ checkoutTables: false, testnetOnlyAddresses: true }) })).database_schema).toBe('fail')
     const unreachable = vi.fn(async () => Promise.reject(new Error(`connect ECONNREFUSED ${DB}`)))
     const report = await runPreflight(COMPLETE, { fetch: healthy, probeDatabase: unreachable })
     expect(statuses(report).database_schema).toBe('fail')
@@ -225,17 +237,59 @@ function writeOrderFile(file: string, content: Record<string, unknown>) {
 describe('sandbox isolation: refresh never touches a non-sandbox order', () => {
   const ready = (env: Record<string, string | undefined>) => runPreflight(env, { fetch: healthy, probeDatabase: sandboxDb })
 
-  it.each([
+  const refusals: [string, Record<string, string | undefined>][] = [
     ['hosted runtime', { VERCEL: '1' }],
     ['production NODE_ENV', { NODE_ENV: 'production' }],
     ['mainnet network', { SANDBOX_NETWORK: 'mainnet' }],
     ['no disposable confirmation', { SANDBOX_DATABASE_IS_DISPOSABLE: undefined }],
     ['production database URL', { CHECKOUT_DATABASE_URL: DB }],
-  ])('the CLI refuses refresh before opening any store: %s', async (_label, override) => {
+  ]
+  // Counts every external access the real preflight and the store factory could make.
+  const counted = () => {
+    const health = vi.fn(healthy)
+    const db = vi.fn(sandboxDb)
     const makeDeps = vi.fn()
-    const code = await runSandboxCommand('refresh', [], { env: { ...COMPLETE, ...override }, orderFile: '/nonexistent/order.json', preflight: ready, makeDeps, out: () => {} })
+    const calls = () => ({ health: health.mock.calls.length, db: db.mock.calls.length, makeDeps: makeDeps.mock.calls.length })
+    return { preflight: (env: Record<string, string | undefined>) => runPreflight(env, { fetch: health, probeDatabase: db }), makeDeps, calls }
+  }
+
+  it.each(refusals)('refresh with a valid sandbox order file contacts nothing when refused: %s', async (_label, override) => {
+    const file = join(mkdtempSync(join(tmpdir(), 'hh-sandbox-')), 'order.json')
+    const created = fixtureDeps()
+    await createTestnetOrder(created)
+    writeOrderFile(file, JSON.parse(readFileSync(created.orderFile, 'utf8')))
+    const c = counted()
+    const code = await runSandboxCommand('refresh', [], { env: { ...COMPLETE, ...override }, orderFile: file, preflight: c.preflight, makeDeps: c.makeDeps, out: () => {} })
     expect(code).toBe(1)
-    expect(makeDeps).not.toHaveBeenCalled()
+    expect(c.calls()).toEqual({ health: 0, db: 0, makeDeps: 0 })
+  })
+
+  it.each(refusals)('create contacts nothing when refused: %s', async (_label, override) => {
+    const c = counted()
+    const file = join(mkdtempSync(join(tmpdir(), 'hh-sandbox-')), 'order.json')
+    const code = await runSandboxCommand('create', ['--confirm-testnet'], { env: { ...COMPLETE, ...override }, orderFile: file, preflight: c.preflight, makeDeps: c.makeDeps, out: () => {} })
+    expect(code).toBe(1)
+    expect(c.calls()).toEqual({ health: 0, db: 0, makeDeps: 0 })
+  })
+
+  it('create refuses an existing order file before the preflight runs', async () => {
+    const c = counted()
+    const file = join(mkdtempSync(join(tmpdir(), 'hh-sandbox-')), 'order.json')
+    writeFileSync(file, '{}')
+    expect(await runSandboxCommand('create', ['--confirm-testnet'], { env: COMPLETE, orderFile: file, preflight: c.preflight, makeDeps: c.makeDeps, out: () => {}, err: () => {} })).toBe(1)
+    expect(c.calls()).toEqual({ health: 0, db: 0, makeDeps: 0 })
+  })
+
+  it('refresh refuses a missing or mislabelled order file before the preflight runs', async () => {
+    const c = counted()
+    const errors: string[] = []
+    const file = join(mkdtempSync(join(tmpdir(), 'hh-sandbox-')), 'order.json')
+    writeOrderFile(file, { recoveryCode: 42, network: 'testnet', offerVersion: SANDBOX_OFFER.version })
+    for (const orderFile of ['/nonexistent/order.json', file]) {
+      expect(await runSandboxCommand('refresh', [], { env: COMPLETE, orderFile, preflight: c.preflight, makeDeps: c.makeDeps, out: () => {}, err: (l) => errors.push(l) })).toBe(1)
+    }
+    expect(c.calls()).toEqual({ health: 0, db: 0, makeDeps: 0 })
+    expect(errors.join('\n')).toMatch(/Neither the database nor the provider was contacted/)
   })
 
   it('the CLI refuses refresh against a database with the mainnet-only constraint', async () => {
@@ -301,7 +355,7 @@ function orchardOnlyTx() {
   return {
     txid: 'ab'.repeat(32), authdigest: 'cd'.repeat(32), size: 9165, overwintered: true, version: 5, versiongroupid: '26a7270a', locktime: 0, expiryheight: 3100000,
     vin: [], vout: [], vjoinsplit: [], valueBalance: 0, valueBalanceZat: 0, vShieldedSpend: [], vShieldedOutput: [],
-    orchard: { actions: [orchardAction(1), orchardAction(2)], valueBalance: 0.0001, valueBalanceZat: 10_000, flags: { enableSpends: true, enableOutputs: true }, anchor: hex(32, 9), proof: hex(64, 10), bindingSig: hex(64, 11) },
+    orchard: { actions: [orchardAction(1), orchardAction(2)], valueBalance: 0.0001, valueBalanceZat: 10_000, flags: { enableSpends: true, enableOutputs: true }, anchor: hex(32, 9), proof: hex(2720 + 2272 * 2, 10), bindingSig: hex(64, 11) },
   }
 }
 type Tx = ReturnType<typeof orchardOnlyTx>
@@ -313,32 +367,57 @@ describe('shielded transaction policy check (offline, Orchard only)', () => {
     expect(checkShieldedTransaction(orchardOnlyTx())).toEqual({ fullyShielded: true, verdict: 'orchard_only', orchardActions: 2, feeZatoshis: 10_000 })
   })
 
-  const variants: [string, (t: Tx) => unknown, string][] = [
+  // Contradictory, malformed or pool-crossing data fails.
+  const failures: [string, (t: Tx) => unknown, string][] = [
     ['Sapling to Orchard pool crossing', (t) => ({ ...t, vShieldedSpend: [saplingSpend], valueBalance: 1, valueBalanceZat: 100_000_000, orchard: { ...t.orchard, valueBalance: -0.9999, valueBalanceZat: -99_990_000, flags: { enableSpends: false, enableOutputs: true } } }), 'has Sapling spends (value crossing from Sapling)'],
-    ['Orchard to Sapling pool crossing', (t) => ({ ...t, vShieldedOutput: [saplingOutput], valueBalanceZat: -50_000, orchard: { ...t.orchard, valueBalance: 0.0006, valueBalanceZat: 60_000 } }), 'has Sapling outputs (value crossing into Sapling)'],
-    ['nonzero Sapling balance', (t) => ({ ...t, valueBalanceZat: 5 }), 'nonzero Sapling value balance'],
+    ['Orchard to Sapling pool crossing', (t) => ({ ...t, vShieldedOutput: [saplingOutput], valueBalance: -0.0005, valueBalanceZat: -50_000, orchard: { ...t.orchard, valueBalance: 0.0006, valueBalanceZat: 60_000 } }), 'has Sapling outputs (value crossing into Sapling)'],
+    ['nonzero Sapling balance', (t) => ({ ...t, valueBalance: 0.00000005, valueBalanceZat: 5 }), 'nonzero Sapling value balance'],
+    ['nonzero Sapling ZEC balance, zero zatoshi', (t) => ({ ...t, valueBalance: 1 }), 'Sapling valueBalance disagrees with valueBalanceZat'],
+    ['nonzero Sapling ZEC balance, zatoshi absent', (t) => ({ ...t, valueBalance: 1, valueBalanceZat: undefined }), 'nonzero Sapling value balance'],
+    ['malformed Sapling balance', (t) => ({ ...t, valueBalanceZat: 0.5 }), 'Sapling valueBalanceZat malformed'],
     ['Orchard spends disabled', (t) => ({ ...t, orchard: { ...t.orchard, flags: { enableSpends: false, enableOutputs: true } } }), 'Orchard spends disabled (value did not come from Orchard)'],
-    ['Orchard flags missing', (t) => ({ ...t, orchard: { ...t.orchard, flags: undefined } }), 'Orchard flags missing'],
     ['negative Orchard balance', (t) => ({ ...t, orchard: { ...t.orchard, valueBalance: -0.0001, valueBalanceZat: -10_000 } }), 'Orchard value balance is not a positive fee'],
-    ['Orchard balance missing', (t) => ({ ...t, orchard: { ...t.orchard, valueBalanceZat: undefined } }), 'Orchard valueBalanceZat missing'],
     ['disagreeing Orchard balances', (t) => ({ ...t, orchard: { ...t.orchard, valueBalance: 1 } }), 'Orchard valueBalance disagrees with valueBalanceZat'],
     ['transparent input', (t) => ({ ...t, vin: [{ txid: 'ef'.repeat(32), vout: 0 }] }), 'has transparent inputs'],
     ['transparent output', (t) => ({ ...t, vout: [{ valueZat: 1 }] }), 'has transparent outputs'],
     ['Sprout joinsplit', (t) => ({ ...t, vjoinsplit: [{}] }), 'has Sprout joinsplits'],
-    ['vin missing', (t) => ({ ...t, vin: undefined }), 'vin missing'],
-    ['Sapling spends missing', (t) => ({ ...t, vShieldedSpend: undefined }), 'vShieldedSpend missing'],
-    ['malformed action', (t) => ({ ...t, orchard: { ...t.orchard, actions: [{}, {}] } }), 'Orchard action fields malformed'],
+    ['non-object action', (t) => ({ ...t, orchard: { ...t.orchard, actions: [null, orchardAction(2)] } }), 'Orchard action 0 malformed'],
+    ['one-byte encCiphertext', (t) => ({ ...t, orchard: { ...t.orchard, actions: [{ ...orchardAction(1), encCiphertext: 'ab' }, orchardAction(2)] } }), 'Orchard action 0 encCiphertext is not 580 bytes of hex'],
+    ['short outCiphertext', (t) => ({ ...t, orchard: { ...t.orchard, actions: [orchardAction(1), { ...orchardAction(2), outCiphertext: hex(79, 1) }] } }), 'Orchard action 1 outCiphertext is not 80 bytes of hex'],
+    ['long spendAuthSig', (t) => ({ ...t, orchard: { ...t.orchard, actions: [{ ...orchardAction(1), spendAuthSig: hex(65, 1) }, orchardAction(2)] } }), 'Orchard action 0 spendAuthSig is not 64 bytes of hex'],
+    ['upper-case hex', (t) => ({ ...t, orchard: { ...t.orchard, anchor: 'AB'.repeat(32) } }), 'Orchard anchor is not 32 bytes of hex'],
+    ['proof sized for one action', (t) => ({ ...t, orchard: { ...t.orchard, proof: hex(2720 + 2272, 10) } }), 'Orchard proof is not 7264 bytes of hex'],
+    ['short bindingSig', (t) => ({ ...t, orchard: { ...t.orchard, bindingSig: hex(32, 11) } }), 'Orchard bindingSig is not 64 bytes of hex'],
     ['no actions', (t) => ({ ...t, orchard: { ...t.orchard, actions: [] } }), 'no Orchard actions'],
-    ['no Orchard bundle', (t) => ({ ...t, orchard: undefined }), 'no Orchard bundle'],
-    ['bad txid', (t) => ({ ...t, txid: 'xyz' }), 'missing txid'],
+    ['bad txid', (t) => ({ ...t, txid: 'xyz' }), 'txid is not 32 bytes of hex'],
     ['wrong version group', (t) => ({ ...t, versiongroupid: '892f2085' }), 'not a v5 (NU5) transaction encoding'],
     ['v4 transaction', (t) => ({ ...t, version: 4 }), 'not a v5 transaction (no Orchard)'],
-    ['version missing', (t) => ({ ...t, version: undefined }), 'version missing'],
   ]
-  it.each(variants)('fails: %s', (_label, change, reason) => {
+  it.each(failures)('fails: %s', (_label, change, reason) => {
     const result = checkShieldedTransaction(change(orchardOnlyTx()))
     expect(result).toMatchObject({ fullyShielded: false, verdict: 'fail' })
     expect(!result.fullyShielded && result.reasons).toContain(reason)
+  })
+
+  // Incomplete data is unverified: never a pass, and not claimed to be a crossing either.
+  const incomplete: [string, (t: Tx) => unknown, string][] = [
+    ['Orchard flags missing', (t) => ({ ...t, orchard: { ...t.orchard, flags: undefined } }), 'Orchard flags missing'],
+    ['Orchard balance missing', (t) => ({ ...t, orchard: { ...t.orchard, valueBalanceZat: undefined } }), 'Orchard valueBalanceZat missing'],
+    ['vin missing', (t) => ({ ...t, vin: undefined }), 'vin missing'],
+    ['Sapling spends missing', (t) => ({ ...t, vShieldedSpend: undefined }), 'vShieldedSpend missing'],
+    ['action fields missing', (t) => ({ ...t, orchard: { ...t.orchard, actions: [{}, orchardAction(2)] } }), 'Orchard action 0 cv missing'],
+    ['anchor, proof and bindingSig missing', (t) => ({ ...t, orchard: { ...t.orchard, anchor: undefined, proof: undefined, bindingSig: undefined } }), 'Orchard proof missing'],
+    ['no Orchard bundle', (t) => ({ ...t, orchard: undefined }), 'orchard bundle missing'],
+    ['version missing', (t) => ({ ...t, version: undefined }), 'version missing'],
+  ]
+  it.each(incomplete)('unverified: %s', (_label, change, reason) => {
+    const result = checkShieldedTransaction(change(orchardOnlyTx()))
+    expect(result).toMatchObject({ fullyShielded: false, verdict: 'unverified' })
+    expect(!result.fullyShielded && result.reasons).toContain(reason)
+  })
+
+  it('treats a Sapling balance absent in both forms as the zero the v5 encoding omits', () => {
+    expect(checkShieldedTransaction({ ...orchardOnlyTx(), valueBalance: undefined, valueBalanceZat: undefined })).toMatchObject({ fullyShielded: true, verdict: 'orchard_only' })
   })
 
   it('reports an unknown later transaction version as unverified, not passed', () => {
@@ -349,8 +428,12 @@ describe('shielded transaction policy check (offline, Orchard only)', () => {
     expect(checkShieldedTransaction(tx)).toMatchObject({ fullyShielded: false, verdict: 'fail' })
   })
 
-  it('check-tx exits 1 on malformed JSON and 0 on the Orchard-only fixture', async () => {
-    expect(await runSandboxCommand('check-tx', [], { env: {}, orderFile: '', readStdin: () => '{not json', out: () => {} })).toBe(1)
+  it('check-tx exits 1 on malformed JSON, malformed widths and an incomplete bundle, and 0 on the Orchard-only fixture', async () => {
+    const run = (text: string) => runSandboxCommand('check-tx', [], { env: {}, orderFile: '', readStdin: () => text, out: () => {} })
+    expect(await run('{not json')).toBe(1)
+    const t = orchardOnlyTx()
+    expect(await run(JSON.stringify({ ...t, orchard: { ...t.orchard, actions: [{ ...orchardAction(1), encCiphertext: 'ab', outCiphertext: 'ab', spendAuthSig: 'ab' }] } }))).toBe(1)
+    expect(await run(JSON.stringify({ ...t, orchard: { ...t.orchard, proof: undefined } }))).toBe(1)
     expect(await runSandboxCommand('check-tx', [], { env: {}, orderFile: '', readStdin: () => JSON.stringify(orchardOnlyTx()), out: () => {} })).toBe(0)
   })
 })
@@ -388,6 +471,39 @@ describe.skipIf(!PG_URL)('sandbox database (PostgreSQL)', () => {
     await admin.query(`BEGIN; ${read('../../db/sandbox/0001_testnet_only.sql')}; COMMIT;`)
     await admin.end()
     expect(await probeDatabase(scoped())).toEqual({ checkoutTables: true, testnetOnlyAddresses: true })
+  })
+
+  // Each case is a fresh schema with the unchanged production migration, then `setup`, then the real
+  // read-only probe. Only the sandbox migration's exact, validated definition counts as testnet-only.
+  const probeWith = async (setup: string) => {
+    const other = `sandbox_probe_${randomUUID().replaceAll('-', '')}`
+    const admin = new pg.Client({ connectionString: PG_URL })
+    await admin.connect()
+    try {
+      await admin.query(`CREATE SCHEMA ${other}; SET search_path TO ${other}`)
+      await admin.query(`BEGIN; ${read('../../db/migrations/0001_checkout_orders.sql')}; ${setup}; COMMIT;`)
+      const url = new URL(PG_URL!)
+      url.searchParams.set('options', `-c search_path=${other}`)
+      return await probeDatabase(url.toString())
+    } finally {
+      await admin.query(`DROP SCHEMA ${other} CASCADE`)
+      await admin.end()
+    }
+  }
+  const DROP_MAINNET = 'ALTER TABLE checkout_invoices DROP CONSTRAINT checkout_invoices_payment_address_check'
+  it.each([
+    ['the production migration alone', ''],
+    ['a mainnet constraint renamed to the sandbox name', 'ALTER TABLE checkout_invoices RENAME CONSTRAINT checkout_invoices_payment_address_check TO checkout_invoices_payment_address_testnet_only'],
+    ['a permissive check under the sandbox name', `${DROP_MAINNET}; ALTER TABLE checkout_invoices ADD CONSTRAINT checkout_invoices_payment_address_testnet_only CHECK (payment_address ~ '^utest1')`],
+    ['no address check at all', DROP_MAINNET],
+    ['the sandbox check left NOT VALID', `${DROP_MAINNET}; ALTER TABLE checkout_invoices ADD CONSTRAINT checkout_invoices_payment_address_testnet_only CHECK (payment_address ~ '^utest1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$' AND length(payment_address) BETWEEN 66 AND 1006) NOT VALID`],
+    ['the sandbox check added beside the mainnet one', `ALTER TABLE checkout_invoices ADD CONSTRAINT checkout_invoices_payment_address_testnet_only CHECK (payment_address ~ '^utest1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$' AND length(payment_address) BETWEEN 66 AND 1006)`],
+    ['the sandbox check plus a permissive extra', `${read('../../db/sandbox/0001_testnet_only.sql')}; ALTER TABLE checkout_invoices ADD CONSTRAINT extra CHECK (payment_address <> '')`],
+  ])('the real probe refuses %s', async (_label, setup) => {
+    expect(await probeWith(setup)).toEqual({ checkoutTables: true, testnetOnlyAddresses: false })
+  })
+  it('the real probe accepts the sandbox migration as written', async () => {
+    expect(await probeWith(read('../../db/sandbox/0001_testnet_only.sql'))).toEqual({ checkoutTables: true, testnetOnlyAddresses: true })
   })
 
   it('the CLI refuses refresh against a production-shaped database, using the real probe', async () => {

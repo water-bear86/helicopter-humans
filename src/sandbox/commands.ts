@@ -3,10 +3,11 @@
 //
 // Every command that opens the order store (create, refresh) first passes the same full preflight:
 // local runtime, testnet network, disposable sandbox database with the testnet-only schema, and a
-// healthy testnet provider. On refusal no store is opened and the provider is never contacted.
-import { readFileSync } from 'node:fs'
+// healthy testnet provider. The preflight contacts nothing external until its local checks pass, and
+// refresh validates its order file before that. On refusal no store is opened.
+import { existsSync, readFileSync } from 'node:fs'
 import type { Env } from '../checkout/readiness.js'
-import { checkShieldedTransaction, createTestnetOrder, refreshTestnetOrder, SandboxRefusal, testnetDeps, type HarnessDeps } from './harness.js'
+import { checkShieldedTransaction, createTestnetOrder, readOrderFile, refreshTestnetOrder, SandboxRefusal, testnetDeps, type HarnessDeps } from './harness.js'
 import { runPreflight, type PreflightReport } from './preflight.js'
 
 export interface CommandIo {
@@ -33,8 +34,16 @@ export async function runSandboxCommand(command: string, flags: string[], io: Co
     out(report.ready ? 'READY.' : 'NOT READY. No order was created, read or changed.')
   }
 
-  // Runs `use` only after a passing preflight, and always closes the store it opened.
-  const gated = async (use: (deps: HarnessDeps) => Promise<void>): Promise<number> => {
+  // Runs `use` only after `local` (a check with no external access) and a passing preflight, and
+  // always closes the store it opened.
+  const gated = async (use: (deps: HarnessDeps) => Promise<void>, local: () => void = () => undefined): Promise<number> => {
+    try {
+      local()
+    } catch (error) {
+      if (!(error instanceof SandboxRefusal)) throw error
+      err(`refused: ${error.message}. Neither the database nor the provider was contacted.`)
+      return 1
+    }
     const report = await preflight(io.env)
     printReport(report)
     if (!report.ready) return 1
@@ -67,9 +76,14 @@ export async function runSandboxCommand(command: string, flags: string[], io: Co
         out(`Recovery code saved to ${io.orderFile} (0600). It is not printed.`)
         if (uri) out(`Testnet payment URI (no monetary value): ${uri}`)
         out(JSON.stringify(evidence, null, 2))
+      }, () => {
+        if (existsSync(io.orderFile)) throw new SandboxRefusal(`an order file already exists (${io.orderFile}); one attempt per file, refresh it or remove it deliberately`)
       })
     case 'refresh':
-      return gated(async (deps) => out(JSON.stringify(await refreshTestnetOrder(deps), null, 2)))
+      return gated(
+        async (deps) => out(JSON.stringify(await refreshTestnetOrder(deps), null, 2)),
+        () => void readOrderFile(io.orderFile),
+      )
     case 'check-tx': {
       const read = io.readStdin ?? (() => readFileSync(0, 'utf8'))
       let tx: unknown
