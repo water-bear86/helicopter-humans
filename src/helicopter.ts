@@ -134,6 +134,10 @@ function fly(art: HTMLElement, scene: SVGSVGElement, flight: SVGGElement) {
 }
 
 export function initHelicopter() {
+  const visibility = () => document.documentElement.classList.toggle('is-page-hidden', document.hidden)
+  visibility()
+  document.addEventListener('visibilitychange', visibility)
+
   const art = document.querySelector<HTMLElement>('.hero-art')
   const scene = art?.querySelector('svg')
   const flight = scene?.querySelector<SVGGElement>('.flight')

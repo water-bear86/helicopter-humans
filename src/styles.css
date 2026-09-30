@@ -333,12 +333,70 @@ mark {
 }
 
 .heli {
+  --rotor-beat: 250ms;
   animation: hover 2.4s ease-in-out infinite;
 }
 
 .rotor {
   transform-origin: 120px 28px;
-  animation: spin 0.25s linear infinite;
+  animation: spin var(--rotor-beat) linear infinite;
+}
+
+/* Six rotor beats make one trail. Each beat ejects a word, alternating blade tips.
+   These loops live inside .heli, so the scene and cloned flyer share the effect. */
+.rotor-whup {
+  --whup-drift: -48px;
+  --whup-lift: 12px;
+  --whup-tilt: -12deg;
+  fill: var(--acid);
+  stroke: var(--ink);
+  stroke-width: 1px;
+  paint-order: stroke fill;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 900;
+  text-anchor: middle;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: rotor-whup calc(var(--rotor-beat) * 6) linear infinite;
+}
+
+.rotor-whup-right {
+  --whup-drift: 48px;
+  --whup-tilt: 12deg;
+}
+
+.rotor-whup:nth-child(2) { animation-delay: calc(var(--rotor-beat) * -1); }
+.rotor-whup:nth-child(3) { animation-delay: calc(var(--rotor-beat) * -2); }
+.rotor-whup:nth-child(4) { animation-delay: calc(var(--rotor-beat) * -3); }
+.rotor-whup:nth-child(5) { animation-delay: calc(var(--rotor-beat) * -4); }
+.rotor-whup:nth-child(6) { animation-delay: calc(var(--rotor-beat) * -5); }
+
+.rotor-whup:nth-child(3),
+.rotor-whup:nth-child(4) { --whup-lift: -8px; }
+.rotor-whup:nth-child(5),
+.rotor-whup:nth-child(6) { --whup-lift: 2px; }
+
+@keyframes rotor-whup {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.35);
+  }
+  15% {
+    opacity: 1;
+  }
+  38% {
+    opacity: 1;
+  }
+  65% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--whup-drift), var(--whup-lift)) scale(1) rotate(var(--whup-tilt));
+  }
 }
 
 .whup {
@@ -375,7 +433,8 @@ mark {
   display: none;
 }
 
-.hero-art.is-offstage :is(.heli, .rotor, .whup) {
+.hero-art.is-offstage :is(.heli, .rotor, .whup, .rotor-whup),
+.is-page-hidden :is(.heli, .rotor, .whup, .rotor-whup) {
   animation-play-state: paused;
 }
 
@@ -742,6 +801,10 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .rotor-whups {
+    display: none;
+  }
+
   html {
     scroll-behavior: auto;
   }
