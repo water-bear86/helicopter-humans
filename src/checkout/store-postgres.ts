@@ -210,11 +210,13 @@ export class PostgresOrderStore implements OrderStore {
   }
 
   private async loadRest(db: Queryable, order: OrderRow): Promise<OrderSnapshot> {
-    const [invoices, receipts, refunds] = await Promise.all([
-      db.query('SELECT * FROM checkout_invoices WHERE order_id = $1 ORDER BY created_at, provider_invoice_id', [order.id]),
-      db.query('SELECT * FROM checkout_receipts WHERE order_id = $1', [order.id]),
-      db.query('SELECT * FROM checkout_refund_requests WHERE order_id = $1', [order.id]),
-    ])
+    // Sequential: overlapping queries on one client are deprecated in pg 8 and rejected by pg 9.
+    const invoices = await db.query(
+      'SELECT * FROM checkout_invoices WHERE order_id = $1 ORDER BY created_at, provider_invoice_id',
+      [order.id],
+    )
+    const receipts = await db.query('SELECT * FROM checkout_receipts WHERE order_id = $1', [order.id])
+    const refunds = await db.query('SELECT * FROM checkout_refund_requests WHERE order_id = $1', [order.id])
     return {
       order,
       invoices: invoices.rows.map(invoiceFromRow),
@@ -237,7 +239,6 @@ export class PostgresOrderStore implements OrderStore {
       await client.query('BEGIN')
       const { rows } = await client.query('SELECT * FROM checkout_orders WHERE id = $1 FOR UPDATE', [orderId])
       if (!rows[0]) throw new StoreConflictError('order not found')
-      // pg issues queries on one client sequentially, so the snapshot reads cannot interleave.
       const snapshot = await this.loadRest(client, orderFromRow(rows[0]))
       const tx: OrderTx = {
         claimTxid: async (txid, owner, invoiceId, now) => {
