@@ -1,5 +1,6 @@
 import './styles.css'
 import { config } from './config'
+import { initHelicopter } from './helicopter'
 import { redact } from './redact'
 import { INITIAL_STATE, runCommand, type TerminalState } from './terminal'
 
@@ -119,3 +120,7 @@ if (config.checkoutUrl) {
 } else {
   checkoutBtn.addEventListener('click', (event) => event.preventDefault())
 }
+
+// ---- Helicopter --------------------------------------------------------
+
+initHelicopter()

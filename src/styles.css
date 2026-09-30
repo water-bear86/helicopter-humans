@@ -340,6 +340,40 @@ mark {
   animation: blink 0.8s steps(2) infinite;
 }
 
+/* Scroll-linked flight (src/helicopter.ts). Decorative: never takes input. */
+
+.flyer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  width: 216px;
+  height: 112px;
+  transform-origin: 96px 56px;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.flyer svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.flyer-chip {
+  fill: var(--night);
+  stroke: var(--ink);
+}
+
+.hero-art.is-flown .flight {
+  display: none;
+}
+
+.hero-art.is-offstage :is(.heli, .rotor, .whup) {
+  animation-play-state: paused;
+}
+
 @keyframes hover {
   50% {
     transform: translateY(10px);
