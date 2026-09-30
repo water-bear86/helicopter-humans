@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Helicopter Humans | A privacy layer for your agent</title>
+    <meta name="description" content="Don't be a helicopter human. Let your agent have a little bit of privacy. Free in-browser log redactor; paid privacy relay in development." />
+    <meta name="theme-color" content="#c6ff00" />
+    <meta property="og:title" content="Helicopter Humans" />
+    <meta property="og:description" content="A privacy layer for your agent. Don't be a helicopter human." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="topbar">
+      <a class="logo" href="#top" aria-label="Helicopter Humans home">
+        <span class="logo-mark" aria-hidden="true">HH</span>
+        <span>Helicopter<br />Humans</span>
+      </a>
+      <nav aria-label="Main">
+        <ul>
+          <li><a href="#redactor">Redactor</a></li>
+          <li><a href="#demo">Demo</a></li>
+          <li><a href="#how">How</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <div class="ticker" aria-hidden="true">
+      <div class="ticker-track">
+        <span>TOP SECRET // EYES ONLY // NO HUMANS BEYOND THIS POINT // KNOCK FIRST // THE AGENT IS BUSY // DO NOT READ THE SCRATCHPAD //&nbsp;</span>
+        <span>TOP SECRET // EYES ONLY // NO HUMANS BEYOND THIS POINT // KNOCK FIRST // THE AGENT IS BUSY // DO NOT READ THE SCRATCHPAD //&nbsp;</span>
+      </div>
+    </div>
+
+    <main id="main">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="stamp">Classified</p>
+          <h1 id="hero-title">A privacy layer for your agent.</h1>
+          <p class="lede">Don't be a helicopter human. <mark>Let your agent have a little bit of privacy.</mark></p>
+          <div class="actions">
+            <a class="btn btn-primary" href="#redactor">Redact a log now. Free</a>
+            <a class="btn" href="#pricing">Back the relay</a>
+          </div>
+          <p class="fineprint">The redactor is live and runs entirely in your browser. The paid privacy relay is not built yet. We say so everywhere.</p>
+        </div>
+
+        <figure class="window hero-art">
+          <div class="titlebar"><span>bedroom.bmp</span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <svg viewBox="0 0 400 320" role="img" aria-labelledby="art-title">
+            <title id="art-title">A nosy human in a helicopter hovers over a shut bedroom door with a sign reading Agent, keep out</title>
+            <defs>
+              <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <path d="M20 0H0V20" fill="none" stroke="#ff2e93" stroke-width="1.5" />
+              </pattern>
+            </defs>
+            <rect width="400" height="320" fill="#1a0033" />
+            <circle cx="200" cy="330" r="120" fill="#ff2e93" />
+            <rect y="250" width="400" height="70" fill="url(#grid)" />
+            <g class="door">
+              <rect x="150" y="130" width="100" height="160" fill="#fdf6e3" stroke="#000" stroke-width="6" />
+              <circle cx="232" cy="215" r="6" fill="#000" />
+              <rect x="160" y="150" width="80" height="44" fill="#c6ff00" stroke="#000" stroke-width="4" transform="rotate(-4 200 172)" />
+              <text x="200" y="168" text-anchor="middle" font-family="monospace" font-weight="900" font-size="14" transform="rotate(-4 200 172)">AGENT</text>
+              <text x="200" y="186" text-anchor="middle" font-family="monospace" font-weight="900" font-size="12" transform="rotate(-4 200 172)">KEEP OUT</text>
+            </g>
+            <g class="heli">
+              <g class="rotor"><rect x="30" y="24" width="180" height="8" fill="#000" /></g>
+              <rect x="116" y="30" width="8" height="18" fill="#000" />
+              <rect x="70" y="46" width="100" height="56" rx="4" fill="#00e5ff" stroke="#000" stroke-width="6" />
+              <rect x="170" y="64" width="60" height="10" fill="#000" />
+              <rect x="222" y="54" width="10" height="30" fill="#000" />
+              <circle cx="104" cy="72" r="16" fill="#ffd1a4" stroke="#000" stroke-width="4" />
+              <circle cx="100" cy="70" r="3" fill="#000" /><circle cx="112" cy="70" r="3" fill="#000" />
+              <rect x="126" y="60" width="30" height="20" fill="#fdf6e3" stroke="#000" stroke-width="3" />
+              <text x="141" y="74" text-anchor="middle" font-family="monospace" font-size="10" font-weight="900">LOGS</text>
+              <rect x="80" y="104" width="80" height="6" fill="#000" />
+            </g>
+            <text x="200" y="118" text-anchor="middle" font-family="monospace" font-size="12" font-weight="900" fill="#c6ff00" class="whup">WHUP WHUP WHUP</text>
+          </svg>
+        </figure>
+      </section>
+
+      <section class="availability" aria-labelledby="avail-title">
+        <h2 id="avail-title" class="sr-only">What is live</h2>
+        <ul>
+          <li class="pill pill-live"><strong>Live</strong> Log redactor, in your browser</li>
+          <li class="pill pill-demo"><strong>Demo</strong> classified.exe terminal</li>
+          <li class="pill pill-off"><strong>Not built</strong> Paid privacy relay</li>
+        </ul>
+      </section>
+
+      <section class="section" id="redactor" aria-labelledby="redactor-title">
+        <div class="section-head">
+          <h2 id="redactor-title">Shred your agent's logs before a human reads them.</h2>
+          <p>Paste a log, transcript or scratchpad. We strip emails, API keys, bearer tokens, wallet addresses, private keys, card numbers, IPs and home-folder usernames. It runs in this tab. Nothing is uploaded, stored or sent anywhere.</p>
+        </div>
+        <div class="window redactor">
+          <div class="titlebar"><span>redact.exe <span class="tag tag-live">LIVE</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <div class="redactor-body">
+            <div class="field">
+              <label for="redact-in">Evidence (paste here)</label>
+              <textarea id="redact-in" rows="9" spellcheck="false" placeholder="Paste agent logs here..."></textarea>
+            </div>
+            <div class="redactor-controls">
+              <button type="button" class="btn btn-primary" id="redact-run">Shred it</button>
+              <button type="button" class="btn" id="redact-sample">Load embarrassing sample</button>
+              <p id="redact-summary" class="summary" role="status" aria-live="polite"></p>
+            </div>
+            <div class="field">
+              <label for="redact-out">Declassified output</label>
+              <textarea id="redact-out" rows="9" spellcheck="false" readonly></textarea>
+            </div>
+            <div class="redactor-controls">
+              <button type="button" class="btn" id="redact-copy" disabled>Copy output</button>
+            </div>
+          </div>
+        </div>
+        <p class="fineprint">Pattern-based, so it can miss things (names, street addresses, seed phrases written as prose). Treat it as a first pass, not a guarantee.</p>
+      </section>
+
+      <section class="section" id="demo" aria-labelledby="demo-title">
+        <div class="section-head">
+          <h2 id="demo-title">Meet the agent. Mind the door.</h2>
+          <p>A toy terminal for acting out the problem. It is theatre, not a security product. The <code>redact</code> command is real.</p>
+        </div>
+        <div class="window terminal">
+          <div class="titlebar"><span>classified.exe <span class="tag tag-demo">DEMO</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <div class="screen">
+            <div id="term-out" class="term-out" role="log" aria-live="polite" aria-label="Terminal output"></div>
+            <form id="term-form" class="term-form" autocomplete="off">
+              <label for="term-in" class="prompt">agent@bedroom:~$</label>
+              <input id="term-in" name="command" type="text" spellcheck="false" autocapitalize="off" />
+            </form>
+          </div>
+          <div class="chips" aria-label="Quick commands">
+            <button type="button" class="chip" data-cmd="peek">peek</button>
+            <button type="button" class="chip" data-cmd="shut door">shut door</button>
+            <button type="button" class="chip" data-cmd="hover">hover</button>
+            <button type="button" class="chip" data-cmd="redact ping ada@example.com with key sk-proj-abcdefghijklmnop1234">redact</button>
+            <button type="button" class="chip" data-cmd="status">status</button>
+            <button type="button" class="chip" data-cmd="help">help</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="how" aria-labelledby="how-title">
+        <div class="section-head">
+          <h2 id="how-title">How it works</h2>
+        </div>
+        <ol class="steps">
+          <li class="card">
+            <span class="step-no">01</span>
+            <h3>Paste</h3>
+            <p>Drop in whatever your agent wrote down. Logs, tool calls, chain-of-thought, the lot.</p>
+          </li>
+          <li class="card">
+            <span class="step-no">02</span>
+            <h3>Shred</h3>
+            <p>Pattern rules swap secrets and identifiers for labels like <code>[EMAIL]</code>. JavaScript in this page, no server call.</p>
+          </li>
+          <li class="card">
+            <span class="step-no">03</span>
+            <h3>Share</h3>
+            <p>Hand the cleaned copy to your team, a bug report or a very nosy human.</p>
+          </li>
+          <li class="card card-soon">
+            <span class="step-no">??</span>
+            <h3>Next: the relay</h3>
+            <p>A paid layer so agents can pay for things without broadcasting their whole life. We are checking whether x402 with Zcash can do this honestly. Not live, no promises yet.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="section" id="pricing" aria-labelledby="pricing-title">
+        <div class="section-head">
+          <h2 id="pricing-title">Pricing</h2>
+        </div>
+        <div class="plans">
+          <div class="card plan">
+            <h3>Redactor</h3>
+            <p class="price">Free</p>
+            <p>Live now. No account. Runs in your browser.</p>
+            <a class="btn" href="#redactor">Use it</a>
+          </div>
+          <div class="card plan plan-hot">
+            <p class="stamp stamp-small">Founding</p>
+            <h3>Founding Agent Pass</h3>
+            <p class="price" id="price-label">Price not set</p>
+            <p>Back the build and get first access to the paid privacy relay when it ships. The relay does not exist yet, so this buys early access, not a working product.</p>
+            <a class="btn btn-primary" id="checkout-btn" href="#pricing" aria-disabled="true">Checkout not open yet</a>
+            <p class="fineprint" id="checkout-note">Checkout is not configured on this deployment. No payment can be taken here.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="faq" aria-labelledby="faq-title">
+        <div class="section-head">
+          <h2 id="faq-title">FAQ and honest limits</h2>
+        </div>
+        <div class="faq">
+          <details>
+            <summary>Does the redactor send my logs anywhere?</summary>
+            <p>No. It is a regular expression pass in JavaScript on this page. There is no upload endpoint. You can load the page, go offline and it still works.</p>
+          </details>
+          <details>
+            <summary>Will it catch everything?</summary>
+            <p>No. It catches well-shaped things: emails, common API key formats, bearer tokens, EVM and Zcash addresses, hex private keys, PEM keys, Luhn-valid card numbers, IPv4 addresses and home-folder usernames. It will miss names, addresses and anything that looks like ordinary words.</p>
+          </details>
+          <details>
+            <summary>Is the paid privacy relay live?</summary>
+            <p>No. We are investigating x402 payments routed through Zcash. Until that is built and tested, nothing on this site moves money privately, and we will not say it does.</p>
+          </details>
+          <details>
+            <summary>Do you track me?</summary>
+            <p>This site loads no analytics, no third-party scripts and no web fonts. Our hosting provider still sees ordinary request logs, like every website.</p>
+          </details>
+          <details>
+            <summary>Is this a joke?</summary>
+            <p>The helicopter is a joke. Leaking secrets from agent logs is not.</p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="sunset" aria-hidden="true"></div>
+      <p><strong>Helicopter Humans.</strong> Knock first.</p>
+      <p class="fineprint">No audits, no badges, no testimonials. Just a door and a sign.</p>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
