@@ -1,5 +1,5 @@
-import { disabledAdapter } from './disabled'
-import type { PaymentAdapter } from './types'
+import { disabledAdapter } from './disabled.js'
+import type { PaymentAdapter } from './types.js'
 
 // Register new adapters here. The payment adapter PR adds one entry and nothing else in this file.
 const ADAPTERS: Record<string, PaymentAdapter> = {

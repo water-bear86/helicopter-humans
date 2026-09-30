@@ -1,4 +1,4 @@
-import { PaymentsUnavailableError, type PaymentAdapter } from './types'
+import { PaymentsUnavailableError, type PaymentAdapter } from './types.js'
 
 // Default adapter: refuses everything. Keeps the site honest until a verified adapter is registered.
 export const disabledAdapter: PaymentAdapter = {
