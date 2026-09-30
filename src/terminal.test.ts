@@ -16,8 +16,8 @@ describe('runCommand', () => {
     expect(lines[1]).toContain('1 item redacted')
   })
 
-  it('is honest about payments', () => {
-    expect(runCommand('pay', INITIAL_STATE).lines[0]).toMatch(/not live/)
+  it('keeps payments on the flight plan', () => {
+    expect(runCommand('pay', INITIAL_STATE).lines[0]).toMatch(/coming soon/)
     const status = runCommand('status', INITIAL_STATE).lines.join('\n')
     expect(status).toMatch(/ZEC/)
     expect(status).toMatch(/OFF\s+payment collection/)

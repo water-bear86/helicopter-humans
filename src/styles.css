@@ -335,6 +335,7 @@ mark {
 .heli {
   --rotor-beat: 250ms;
   animation: hover 2.4s ease-in-out infinite;
+  filter: drop-shadow(2px 3px 0 var(--cream));
 }
 
 .rotor {
@@ -399,8 +400,14 @@ mark {
   }
 }
 
-.whup {
-  animation: blink 0.8s steps(2) infinite;
+.pilot-eyes {
+  transform-origin: 106px 70px;
+  animation: pilot-blink 4.8s infinite;
+}
+
+@keyframes pilot-blink {
+  0%, 43%, 47%, 100% { transform: scaleY(1); }
+  45% { transform: scaleY(0.1); }
 }
 
 /* Scroll-linked flight (src/helicopter.ts). Decorative: never takes input. */
@@ -410,9 +417,9 @@ mark {
   top: 0;
   left: 0;
   z-index: 5;
-  width: 216px;
-  height: 112px;
-  transform-origin: 96px 56px;
+  width: 264px;
+  height: 136px;
+  transform-origin: 120px 70px;
   pointer-events: none;
   will-change: transform;
 }
@@ -424,23 +431,18 @@ mark {
   overflow: visible;
 }
 
-.flyer-chip {
-  fill: var(--night);
-  stroke: var(--ink);
-}
-
 .hero-art.is-flown .flight {
   display: none;
 }
 
-.hero-art.is-offstage :is(.heli, .rotor, .whup, .rotor-whup),
-.is-page-hidden :is(.heli, .rotor, .whup, .rotor-whup) {
+.hero-art.is-offstage :is(.heli, .rotor, .pilot-eyes, .rotor-whup),
+.is-page-hidden :is(.heli, .rotor, .pilot-eyes, .rotor-whup) {
   animation-play-state: paused;
 }
 
 @keyframes hover {
   50% {
-    transform: translateY(10px);
+    transform: translateY(4px);
   }
 }
 
@@ -458,16 +460,21 @@ mark {
 
 /* ---- Availability ---- */
 
+.availability {
+  background: var(--ink);
+  border-block: var(--border);
+}
+
 .availability ul {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 1rem;
   list-style: none;
-  margin: 0;
+  max-width: 1100px;
+  margin: 0 auto;
   padding: 1.25rem 1rem;
   background: var(--ink);
-  border-block: var(--border);
 }
 
 .pill {
@@ -500,7 +507,7 @@ mark {
 /* ---- Sections ---- */
 
 .section {
-  max-width: 1200px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: clamp(2.5rem, 6vw, 5rem) clamp(1rem, 4vw, 3rem);
 }

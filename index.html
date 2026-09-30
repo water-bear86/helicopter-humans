@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Helicopter Humans | A privacy layer for your agent</title>
-    <meta name="description" content="Don't be a helicopter human. Let your agent have a little bit of privacy. Free in-browser log redactor; paid privacy relay in development." />
+    <meta name="description" content="Don't be a helicopter human. Let your agent have a little bit of privacy. Free in-browser log redactor. Agent privacy relay coming soon." />
     <meta name="theme-color" content="#c6ff00" />
     <meta property="og:title" content="Helicopter Humans" />
     <meta property="og:description" content="A privacy layer for your agent. Don't be a helicopter human." />
@@ -44,9 +44,9 @@
           <p class="lede">Don't be a helicopter human. <mark>Let your agent have a little bit of privacy.</mark></p>
           <div class="actions">
             <a class="btn btn-primary" href="#redactor">Redact a log now. Free</a>
-            <a class="btn" href="#pricing">Back the relay</a>
+            <a class="btn" href="#pricing">Meet the relay</a>
           </div>
-          <p class="fineprint">The redactor is live and runs entirely in your browser. The paid privacy relay is not built yet. We say so everywhere.</p>
+          <p class="fineprint">Less hovering. More doing. Start with the free redactor. The relay is coming soon.</p>
         </div>
 
         <figure class="window hero-art">
@@ -69,8 +69,8 @@
               <text x="200" y="186" text-anchor="middle" font-family="monospace" font-weight="900" font-size="12" transform="rotate(-4 200 172)">KEEP OUT</text>
             </g>
             <g class="flight">
-            <g class="heli">
-              <g class="rotor"><rect x="30" y="24" width="180" height="8" fill="#000" /></g>
+            <g class="heli"><g class="chopper" transform="translate(120 70) scale(1.12) translate(-120 -70)">
+              <g class="rotor"><rect x="30" y="24" width="180" height="8" fill="#c6ff00" stroke="#000" stroke-width="2" /></g>
               <g class="rotor-whups" aria-hidden="true">
                 <text class="rotor-whup rotor-whup-left" x="90" y="29">whup</text>
                 <text class="rotor-whup rotor-whup-right" x="150" y="29">whup</text>
@@ -81,15 +81,14 @@
               </g>
               <rect x="116" y="30" width="8" height="18" fill="#000" />
               <rect x="70" y="46" width="100" height="56" rx="4" fill="#00e5ff" stroke="#000" stroke-width="6" />
-              <rect x="170" y="64" width="60" height="10" fill="#000" />
+              <rect x="170" y="64" width="60" height="10" fill="#ff2e93" stroke="#000" stroke-width="2" />
               <rect x="222" y="54" width="10" height="30" fill="#000" />
               <circle cx="104" cy="72" r="16" fill="#ffd1a4" stroke="#000" stroke-width="4" />
-              <circle cx="100" cy="70" r="3" fill="#000" /><circle cx="112" cy="70" r="3" fill="#000" />
+              <g class="pilot-eyes"><circle cx="100" cy="70" r="3" fill="#000" /><circle cx="112" cy="70" r="3" fill="#000" /></g>
               <rect x="126" y="60" width="30" height="20" fill="#fdf6e3" stroke="#000" stroke-width="3" />
               <text x="141" y="74" text-anchor="middle" font-family="monospace" font-size="10" font-weight="900">LOGS</text>
               <rect x="80" y="104" width="80" height="6" fill="#000" />
-            </g>
-            <text x="200" y="118" text-anchor="middle" font-family="monospace" font-size="12" font-weight="900" fill="#c6ff00" class="whup">WHUP WHUP WHUP</text>
+            </g></g>
             </g>
           </svg>
         </figure>
@@ -98,16 +97,16 @@
       <section class="availability" aria-labelledby="avail-title">
         <h2 id="avail-title" class="sr-only">What is live</h2>
         <ul>
-          <li class="pill pill-live"><strong>Live</strong> Log redactor, in your browser</li>
-          <li class="pill pill-demo"><strong>Demo</strong> classified.exe terminal</li>
-          <li class="pill pill-off"><strong>Not built</strong> Paid privacy relay</li>
+          <li class="pill pill-live"><strong>Live</strong> Log redactor</li>
+          <li class="pill pill-demo"><strong>Demo</strong> classified.exe</li>
+          <li class="pill pill-off"><strong>Coming soon</strong> Agent privacy relay</li>
         </ul>
       </section>
 
       <section class="section" id="redactor" aria-labelledby="redactor-title">
         <div class="section-head">
           <h2 id="redactor-title">Shred your agent's logs before a human reads them.</h2>
-          <p>Paste a log, transcript or scratchpad. We strip emails, API keys, bearer tokens, wallet addresses, private keys, card numbers, IPs and macOS/Linux home-folder usernames. It runs in this tab. Nothing is uploaded, stored or sent anywhere.</p>
+          <p>Before that scratchpad lands in Slack, give it a trip through redact.exe. Scrub emails, API keys, bearer tokens, wallet addresses, private keys, card numbers, IPs and macOS/Linux home-folder usernames. All in your browser. Your logs stay with you.</p>
         </div>
         <div class="window redactor">
           <div class="titlebar"><span>redact.exe <span class="tag tag-live">LIVE</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
@@ -136,7 +135,7 @@
       <section class="section" id="demo" aria-labelledby="demo-title">
         <div class="section-head">
           <h2 id="demo-title">Meet the agent. Mind the door.</h2>
-          <p>A toy terminal for acting out the problem. It is theatre, not a security product. The <code>redact</code> command is real.</p>
+          <p>Welcome to a very classified bedroom. Try <code>peek</code>, then <code>shut door</code>. The door has opinions. So does the agent. Bonus: <code>redact</code> actually shreds secrets.</p>
         </div>
         <div class="window terminal">
           <div class="titlebar"><span>classified.exe <span class="tag tag-demo">DEMO</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
@@ -160,57 +159,57 @@
 
       <section class="section" id="how" aria-labelledby="how-title">
         <div class="section-head">
-          <h2 id="how-title">How it works</h2>
+          <h2 id="how-title">A little privacy. Three little steps.</h2>
         </div>
         <ol class="steps">
           <li class="card">
             <span class="step-no">01</span>
             <h3>Paste</h3>
-            <p>Drop in whatever your agent wrote down. Logs, tool calls, chain-of-thought, the lot.</p>
+            <p>Logs. Transcripts. That suspiciously candid scratchpad. Paste the bits you need to share.</p>
           </li>
           <li class="card">
             <span class="step-no">02</span>
             <h3>Shred</h3>
-            <p>Pattern rules swap secrets and identifiers for labels like <code>[EMAIL]</code>. JavaScript in this page, no server call.</p>
+            <p>Trade the usual secrets for tidy labels like <code>[EMAIL]</code>. One click. No upload. No helicopter clearance required.</p>
           </li>
           <li class="card">
             <span class="step-no">03</span>
             <h3>Share</h3>
-            <p>Hand the cleaned copy to your team, a bug report or a very nosy human.</p>
+            <p>Give it a quick once-over, then send the cleaned copy to your team, a bug report or a very nosy human.</p>
           </li>
           <li class="card card-soon">
             <span class="step-no">??</span>
-            <h3>Next: the relay</h3>
-            <p>A paid layer so agents can pay for things without broadcasting their whole life. We are prototyping direct shielded ZEC payment verification. No payment route is enabled yet.</p>
+            <h3>Next: less hovering.</h3>
+            <p>Your agent has places to be and humans to avoid. On the flight plan: a privacy relay with direct shielded ZEC payments. Keep an eye on the landing pad.</p>
           </li>
         </ol>
       </section>
 
       <section class="section" id="pricing" aria-labelledby="pricing-title">
         <div class="section-head">
-          <h2 id="pricing-title">Pricing</h2>
+          <h2 id="pricing-title">Pick your level of classified.</h2>
         </div>
         <div class="plans">
           <div class="card plan">
             <h3>Redactor</h3>
             <p class="price">Free</p>
-            <p>Live now. No account. Runs in your browser.</p>
+            <p>Secrets out. Clean copy in. No account, no upload, no invoice.</p>
             <a class="btn" href="#redactor">Use it</a>
           </div>
           <div class="card plan plan-hot">
             <p class="stamp stamp-small">Founding</p>
             <h3>Founding Agent Pass</h3>
-            <p class="price" id="price-label">Price not set</p>
-            <p>Back the build and get first access to the paid privacy relay when it ships. The relay does not exist yet, so this buys early access, not a working product.</p>
-            <a class="btn btn-primary" id="checkout-btn" href="#pricing" aria-disabled="true">Checkout not open yet</a>
-            <p class="fineprint" id="checkout-note">Checkout is not configured on this deployment. No payment can be taken here.</p>
+            <p class="price" id="price-label">Coming soon</p>
+            <p>Get in on the next flight. Founding access to the agent privacy relay is coming soon. A little less supervision. A little more room to do its thing.</p>
+            <a class="btn btn-primary" id="checkout-btn" href="#pricing" aria-disabled="true">Passes coming soon</a>
+            <p class="fineprint" id="checkout-note">While we ready the landing pad, take the free redactor for a spin.</p>
           </div>
         </div>
       </section>
 
       <section class="section" id="faq" aria-labelledby="faq-title">
         <div class="section-head">
-          <h2 id="faq-title">FAQ and honest limits</h2>
+          <h2 id="faq-title">Questions from the helicopter.</h2>
         </div>
         <div class="faq">
           <details>
@@ -222,8 +221,8 @@
             <p>No. It catches well-shaped things: emails, common API key formats, bearer tokens, EVM and Zcash addresses, hex private keys, PEM keys, Luhn-valid card numbers, IPv4 addresses and home-folder usernames in macOS and Linux paths. It does not catch Windows paths, and it will miss names, addresses and anything that looks like ordinary words.</p>
           </details>
           <details>
-            <summary>Is the paid privacy relay live?</summary>
-            <p>No. The next prototype will verify direct shielded ZEC payments through a third-party provider. It is not a swap, and it does not make ordinary x402 transfers private. Nothing on this site moves money.</p>
+            <summary>When does the relay take off?</summary>
+            <p>Coming soon. We are building toward direct shielded ZEC payments and a hosted agent relay. For now, take the free redactor for a spin; passes will open when the landing pad is ready.</p>
           </details>
           <details>
             <summary>Do you track me?</summary>
@@ -240,7 +239,7 @@
     <footer class="footer">
       <div class="sunset" aria-hidden="true"></div>
       <p><strong>Helicopter Humans.</strong> Knock first.</p>
-      <p class="fineprint">No audits, no badges, no testimonials. Just a door and a sign.</p>
+      <p class="fineprint">Your agent needs a little space. You need a different hobby.</p>
     </footer>
 
     <script type="module" src="/src/main.ts"></script>

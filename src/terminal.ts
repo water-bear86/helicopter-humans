@@ -18,7 +18,7 @@ const HELP = [
   'AVAILABLE COMMANDS (clearance level: snack)',
   '  help            this list',
   '  whoami          identify the occupant',
-  '  status          what is live, what is demo, what is not built',
+  '  status          what is live and what is on the flight plan',
   '  hover           simulate a human hovering over the logs',
   '  peek            attempt to read the agent diary',
   '  shut door       close the bedroom door',
@@ -86,8 +86,8 @@ export function runCommand(raw: string, state: TerminalState): TerminalResult {
     case 'pay':
       return {
         lines: [
-          'Payments are not live on this demo.',
-          'No money moves here. See the Pricing section for what is real today.',
+          'Founding passes are coming soon.',
+          'The landing pad is warming up. Try redact while you wait.',
         ],
         state,
       }

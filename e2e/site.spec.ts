@@ -78,16 +78,16 @@ test('the checkout preview page is closed on the static build', async ({ page })
 test('checkout is visibly unavailable when not configured and does not navigate', async ({ page }) => {
   const checkout = page.locator('#checkout-btn')
   await expect(checkout).toHaveAttribute('aria-disabled', 'true')
-  await expect(checkout).toHaveText('Checkout not open yet')
+  await expect(checkout).toHaveText('Passes coming soon')
   await expect(checkout).toBeDisabled()
   await checkout.click({ force: true })
   await expect(page).toHaveURL(/\/(#.*)?$/)
-  await expect(page.getByText('Checkout is not configured on this deployment.')).toBeVisible()
+  await expect(page.locator('#checkout-note')).toBeVisible()
 })
 
-test('availability labels are honest', async ({ page }) => {
+test('availability distinguishes the live redactor and upcoming relay', async ({ page }) => {
   await expect(page.locator('.pill-live')).toHaveText(/Live\s+Log redactor/)
-  await expect(page.locator('.pill-off')).toHaveText(/Not built\s+Paid privacy relay/)
+  await expect(page.locator('.pill-off')).toHaveText(/Coming soon\s+Agent privacy relay/)
 })
 
 test('page makes no third-party requests', async ({ page, baseURL }) => {
@@ -117,18 +117,17 @@ async function scrollToY(page: import('@playwright/test').Page, y: number) {
 const flightPose = (page: import('@playwright/test').Page) =>
   page.evaluate(() => document.querySelector('.flyer')?.getAttribute('style') ?? document.querySelector('.flight')?.getAttribute('transform'))
 
-test('the helicopter flies with the scroll and retraces its path on the way back', async ({ page }) => {
+test('the helicopter patrols at idle and follows scrolling without a caption', async ({ page }) => {
+  // Bring the scene into view on a phone; the desktop flyer remains visible throughout.
+  await page.locator('.hero-art').scrollIntoViewIfNeeded()
   const start = await flightPose(page)
+  await page.waitForTimeout(700)
+  expect(await flightPose(page)).not.toEqual(start)
+  await expect(page.locator('.whup, .flyer-chip')).toHaveCount(0)
   await scrollToY(page, 500)
   const middle = await flightPose(page)
-  expect(middle).not.toEqual(start)
   await scrollToY(page, 250)
-  const between = await flightPose(page)
-  expect(between).not.toEqual(middle)
-  await scrollToY(page, 500)
-  expect(await flightPose(page)).toEqual(middle)
-  await scrollToY(page, 0)
-  expect(await flightPose(page)).toEqual(start)
+  expect(await flightPose(page)).not.toEqual(middle)
 })
 
 test('the flight never causes horizontal overflow', async ({ page }) => {

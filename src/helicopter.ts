@@ -1,6 +1,6 @@
 import { FLYER_BOX, HELI_CENTER, MIN_GUTTER, flightPose, sceneOffset, type Metrics } from './flight'
 
-// Scroll-linked flight for the hero helicopter. Decorative only: the flyer is
+// Scroll-guided flight with an independent idle patrol. Decorative only: the flyer is
 // aria-hidden and ignores the pointer. With reduced motion, or without JS, the
 // helicopter stays put in its scene.
 
@@ -21,13 +21,10 @@ function buildFlyer(heli: SVGGElement) {
   root.className = 'flyer'
   root.setAttribute('aria-hidden', 'true')
   const svg = svgEl('svg', { viewBox: `${FLYER_BOX.x} ${FLYER_BOX.y} ${FLYER_BOX.w} ${FLYER_BOX.h}`, focusable: 'false' })
-  const chip = svgEl('rect', { class: 'flyer-chip', 'stroke-width': '3' })
-  const caption = svgEl('text', { class: 'whup', 'text-anchor': 'middle', 'font-family': 'monospace', 'font-weight': '900', fill: '#c6ff00' })
-  caption.textContent = 'WHUP WHUP WHUP'
-  svg.append(heli.cloneNode(true), chip, caption)
+  svg.append(heli.cloneNode(true))
   root.append(svg)
   document.body.append(root)
-  return { root, chip, caption }
+  return { root }
 }
 
 function fly(art: HTMLElement, scene: SVGSVGElement, flight: SVGGElement) {
@@ -41,6 +38,8 @@ function fly(art: HTMLElement, scene: SVGSVGElement, flight: SVGGElement) {
   let flyer: ReturnType<typeof buildFlyer> | null = null
   let onStage = true
   let frame = 0
+  let elapsed = 0
+  let previous = 0
 
   function measure() {
     const vw = document.documentElement.clientWidth
@@ -77,30 +76,34 @@ function fly(art: HTMLElement, scene: SVGSVGElement, flight: SVGGElement) {
     if (lane) flight.removeAttribute('transform')
   }
 
-  function render() {
+  function render(now: number) {
     frame = 0
+    if (document.hidden || (!flyer && !onStage)) {
+      previous = 0
+      return
+    }
+    // Only active time advances the patrol: returning to a tab never jumps ahead.
+    if (previous) elapsed += Math.min(now - previous, 64) / 1000
+    previous = now
     const y = window.scrollY
     if (flyer) {
-      const { pose, caption } = flightPose(y, metrics)
+      const pose = flightPose(y, metrics, elapsed)
       flyer.root.style.transform = `translate(${round(pose.cx - ORIGIN.x)}px, ${round(pose.cy - ORIGIN.y)}px) scale(${round(pose.k * 1000) / 1000}) rotate(${round(pose.r)}deg)`
-      const w = caption.size * 8.6
-      const h = caption.size * 1.45
-      flyer.caption.setAttribute('x', `${round(caption.x)}`)
-      flyer.caption.setAttribute('y', `${round(caption.y)}`)
-      flyer.caption.setAttribute('font-size', `${round(caption.size)}`)
-      flyer.chip.setAttribute('x', `${round(caption.x - w / 2)}`)
-      flyer.chip.setAttribute('y', `${round(caption.y - caption.size * 1.08)}`)
-      flyer.chip.setAttribute('width', `${round(w)}`)
-      flyer.chip.setAttribute('height', `${round(h)}`)
-      flyer.chip.setAttribute('opacity', `${round(caption.chip)}`)
-    } else if (onStage) {
-      const { dx, dy, r } = sceneOffset((y - sceneStart) / (sceneEnd - sceneStart), y)
+    } else {
+      const { dx, dy, r } = sceneOffset((y - sceneStart) / (sceneEnd - sceneStart), y, elapsed)
       flight.setAttribute('transform', `translate(${round(dx)} ${round(dy)}) rotate(${round(r)} ${HELI_CENTER.x} ${HELI_CENTER.y})`)
     }
+    schedule()
   }
 
   const schedule = () => {
-    if (!frame) frame = requestAnimationFrame(render)
+    if (!frame && !document.hidden && (flyer || onStage)) frame = requestAnimationFrame(render)
+  }
+  const visibility = () => {
+    cancelAnimationFrame(frame)
+    frame = 0
+    previous = 0
+    schedule()
   }
   const remeasure = () => {
     measure()
@@ -117,13 +120,15 @@ function fly(art: HTMLElement, scene: SVGSVGElement, flight: SVGGElement) {
   const layout = new ResizeObserver(remeasure)
 
   measure()
-  render()
+  schedule()
   window.addEventListener('scroll', schedule, { passive: true })
+  document.addEventListener('visibilitychange', visibility)
   stage.observe(art)
   layout.observe(document.body)
 
   return () => {
     window.removeEventListener('scroll', schedule)
+    document.removeEventListener('visibilitychange', visibility)
     stage.disconnect()
     layout.disconnect()
     cancelAnimationFrame(frame)
