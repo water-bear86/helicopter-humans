@@ -112,11 +112,18 @@ export async function createTestnetOrder(deps: HarnessDeps): Promise<{ evidence:
   return { evidence: evidence(view), uri: view.payment?.uri ?? null }
 }
 
-export async function refreshTestnetOrder(deps: HarnessDeps): Promise<Evidence> {
+// Loads the order the file names from the store and refuses it unless it is a sandbox testnet order.
+// Reads the store only; never contacts the provider. Returns the recovery code.
+export async function loadSandboxOrder(deps: HarnessDeps): Promise<string> {
   const code = readOrderFile(deps.orderFile)
   const snapshot = await deps.store.findByCredentialHash(hashRecoveryCode(code))
   if (!snapshot) throw new SandboxRefusal('order not found in the sandbox database')
   checkSandboxOrder(snapshot)
+  return code
+}
+
+export async function refreshTestnetOrder(deps: HarnessDeps): Promise<Evidence> {
+  const code = await loadSandboxOrder(deps)
   return evidence(await service(deps).refresh(code))
 }
 
@@ -127,70 +134,140 @@ export async function refreshTestnetOrder(deps: HarnessDeps): Promise<Evidence> 
 // Policy: a v5 (NU5) transaction whose value moves only inside the Orchard pool. No transparent
 // inputs or outputs, no Sprout, no Sapling spends or outputs and a zero Sapling balance, Orchard
 // spends and outputs both enabled, and an Orchard value balance that is exactly the (positive) fee.
-// Anything that moves value between pools reveals the amount crossing on chain, so it fails. Missing
-// or malformed fields fail. A transaction version this check does not know (v6 and later, for
-// example under a future network upgrade) is reported unverified, never passed.
+// Anything that moves value between pools reveals the amount crossing on chain, so it fails.
 //
-// A pass is not proof that the transaction is in a block, that the operator's wallet made it, that it
-// paid a particular invoice, or that it is confirmed. Those need the provider's invoice record and
-// the operator's own wallet evidence (docs/SANDBOX_TEST.md).
+// Structure (ZIP 225): every Orchard action field has its exact encoded width (encCiphertext 580
+// bytes, outCiphertext 80, spendAuthSig 64, the rest 32), and a bundle with actions carries its
+// anchor (32), proof (2720 + 2272 per action) and bindingSig (64). Every balance representation that
+// is present (ZEC and zatoshi) must denote an exact zatoshi amount, never rounded, and the two must
+// agree. A Sapling balance absent in both forms
+// is zero, as the v5 encoding omits valueBalanceSapling when there are no Sapling spends or outputs.
+//
+// Contradictory or malformed data fails. Incomplete data (a required field absent) and a transaction
+// version this check does not know (v6 and later) are reported unverified. Neither ever passes.
+//
+// A pass is structural only: it does not verify proofs or signatures, and it is not proof that the
+// transaction is in a block, that the operator's wallet made it, that it paid a particular invoice,
+// or that it is confirmed. Those need the provider's invoice record and the operator's own wallet
+// evidence (docs/SANDBOX_TEST.md).
 export type ShieldedCheck =
   | { fullyShielded: true; verdict: 'orchard_only'; orchardActions: number; feeZatoshis: number }
   | { fullyShielded: false; verdict: 'fail' | 'unverified'; reasons: string[] }
 
-const HEX32 = /^[0-9a-f]{64}$/
 const HEX = /^(?:[0-9a-f]{2})+$/
 const V5_GROUP_ID = '26a7270a'
-const ACTION_HEX32 = ['cv', 'nullifier', 'rk', 'cmx', 'ephemeralKey'] as const
-const ACTION_HEX = ['encCiphertext', 'outCiphertext', 'spendAuthSig'] as const
+const ACTION_BYTES = { cv: 32, nullifier: 32, rk: 32, cmx: 32, ephemeralKey: 32, encCiphertext: 580, outCiphertext: 80, spendAuthSig: 64 } as const
+const ORCHARD_PROOF_BYTES = (actions: number) => 2720 + 2272 * actions
+const MAX_ZAT = 21_000_000 * 1e8
+
+// The zatoshi amount a JSON ZEC number denotes, or undefined if it denotes none. A decimal with at
+// most eight places, in any notation (0.0001, 1e-4), parses to the double nearest n / 10^8, which is
+// exactly what n / 1e8 computes; below MAX_ZAT neighbouring amounts are distinct doubles. So the
+// candidate n is exact only if n / 1e8 reproduces the input: 0.000000004 or 0.000100004 do not.
+function exactZatoshis(zec: unknown): number | undefined {
+  if (typeof zec !== 'number' || !Number.isFinite(zec) || Math.abs(zec) > MAX_ZAT / 1e8) return undefined
+  const zat = Math.round(zec * 1e8)
+  if (zat / 1e8 !== zec) return undefined
+  return zat === 0 ? 0 : zat
+}
 
 export function checkShieldedTransaction(tx: unknown): ShieldedCheck {
-  const fail = (...reasons: string[]): ShieldedCheck => ({ fullyShielded: false, verdict: 'fail', reasons })
-  if (typeof tx !== 'object' || tx === null || Array.isArray(tx)) return fail('not a transaction object')
-  const t = tx as Record<string, unknown>
+  const failures: string[] = []
+  const gaps: string[] = []
+  const result = (): ShieldedCheck | undefined => {
+    if (failures.length) return { fullyShielded: false, verdict: 'fail', reasons: [...failures, ...gaps] }
+    if (gaps.length) return { fullyShielded: false, verdict: 'unverified', reasons: gaps }
+    return undefined
+  }
   const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-  const isZat = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v)
+  // A field of exactly `bytes` bytes of lower-case hex: absent is a gap, anything else a failure.
+  const hexField = (v: unknown, bytes: number, name: string) => {
+    if (v === undefined) gaps.push(`${name} missing`)
+    else if (typeof v !== 'string' || !HEX.test(v) || v.length !== bytes * 2) failures.push(`${name} is not ${bytes} bytes of hex`)
+  }
+  // Checks the present ZEC and zatoshi forms of one balance; returns the zatoshi value if known.
+  // Nothing is rounded: each present form must denote an exact zatoshi amount, and both must agree.
+  const balance = (zec: unknown, zat: unknown, name: string): number | undefined => {
+    if (zat !== undefined && (typeof zat !== 'number' || !Number.isSafeInteger(zat) || Math.abs(zat) > MAX_ZAT)) {
+      failures.push(`${name} valueBalanceZat malformed`)
+      return undefined
+    }
+    let fromZec: number | undefined
+    if (zec !== undefined) {
+      fromZec = exactZatoshis(zec)
+      if (fromZec === undefined) {
+        failures.push(`${name} valueBalance is not an exact zatoshi amount`)
+        return undefined
+      }
+    }
+    if (zat !== undefined && fromZec !== undefined && fromZec !== zat) {
+      failures.push(`${name} valueBalance disagrees with valueBalanceZat`)
+      return undefined
+    }
+    return (zat as number | undefined) ?? fromZec
+  }
 
-  if (typeof t.version !== 'number' || !Number.isInteger(t.version)) return fail('version missing')
+  if (!isObject(tx)) return { fullyShielded: false, verdict: 'fail', reasons: ['not a transaction object'] }
+  const t = tx
+  if (t.version === undefined) return { fullyShielded: false, verdict: 'unverified', reasons: ['version missing'] }
+  if (typeof t.version !== 'number' || !Number.isInteger(t.version)) return { fullyShielded: false, verdict: 'fail', reasons: ['version malformed'] }
   if (t.version > 5) return { fullyShielded: false, verdict: 'unverified', reasons: [`transaction version ${t.version} is not supported by this check`] }
-  if (t.version < 5) return fail('not a v5 transaction (no Orchard)')
+  if (t.version < 5) return { fullyShielded: false, verdict: 'fail', reasons: ['not a v5 transaction (no Orchard)'] }
 
-  const reasons: string[] = []
-  if (typeof t.txid !== 'string' || !HEX32.test(t.txid)) reasons.push('missing txid')
-  if (t.overwintered !== true || t.versiongroupid !== V5_GROUP_ID) reasons.push('not a v5 (NU5) transaction encoding')
+  hexField(t.txid, 32, 'txid')
+  if (t.overwintered === undefined || t.versiongroupid === undefined) gaps.push('v5 encoding fields missing')
+  else if (t.overwintered !== true || t.versiongroupid !== V5_GROUP_ID) failures.push('not a v5 (NU5) transaction encoding')
 
   const empty = (field: string, what: string) => {
     const v = t[field]
-    if (!Array.isArray(v)) reasons.push(`${field} missing`)
-    else if (v.length) reasons.push(what)
+    if (v === undefined) gaps.push(`${field} missing`)
+    else if (!Array.isArray(v)) failures.push(`${field} malformed`)
+    else if (v.length) failures.push(what)
   }
   empty('vin', 'has transparent inputs')
   empty('vout', 'has transparent outputs')
   empty('vjoinsplit', 'has Sprout joinsplits')
   empty('vShieldedSpend', 'has Sapling spends (value crossing from Sapling)')
   empty('vShieldedOutput', 'has Sapling outputs (value crossing into Sapling)')
-  if (t.valueBalanceZat !== undefined && !isZat(t.valueBalanceZat)) reasons.push('Sapling valueBalanceZat malformed')
-  else if ((t.valueBalanceZat ?? 0) !== 0) reasons.push('nonzero Sapling value balance')
+  // Absent in both forms means zero (v5 omits it with no Sapling spends or outputs).
+  const sapling = balance(t.valueBalance, t.valueBalanceZat, 'Sapling')
+  if (sapling !== undefined && sapling !== 0) failures.push('nonzero Sapling value balance')
 
   const orchard = t.orchard
-  if (!isObject(orchard)) return fail(...reasons, 'no Orchard bundle')
-  const actions = orchard.actions
-  if (!Array.isArray(actions) || actions.length === 0) reasons.push('no Orchard actions')
-  else if (!actions.every((a) => isObject(a) && ACTION_HEX32.every((k) => typeof a[k] === 'string' && HEX32.test(a[k] as string)) && ACTION_HEX.every((k) => typeof a[k] === 'string' && HEX.test(a[k] as string)))) {
-    reasons.push('Orchard action fields malformed')
-  }
-  const flags = orchard.flags
-  if (!isObject(flags) || typeof flags.enableSpends !== 'boolean' || typeof flags.enableOutputs !== 'boolean') reasons.push('Orchard flags missing')
+  if (orchard === undefined) gaps.push('orchard bundle missing')
+  else if (!isObject(orchard)) failures.push('orchard bundle malformed')
   else {
-    if (!flags.enableSpends) reasons.push('Orchard spends disabled (value did not come from Orchard)')
-    if (!flags.enableOutputs) reasons.push('Orchard outputs disabled (value did not go to Orchard)')
-  }
-  // With no transparent, Sprout or Sapling value, the Orchard balance is the whole fee.
-  const fee = orchard.valueBalanceZat
-  if (!isZat(fee)) reasons.push('Orchard valueBalanceZat missing')
-  else if (fee <= 0) reasons.push('Orchard value balance is not a positive fee')
-  else if (orchard.valueBalance !== undefined && (typeof orchard.valueBalance !== 'number' || Math.round(orchard.valueBalance * 1e8) !== fee)) reasons.push('Orchard valueBalance disagrees with valueBalanceZat')
+    const actions = orchard.actions
+    let count = 0
+    if (actions === undefined) gaps.push('Orchard actions missing')
+    else if (!Array.isArray(actions)) failures.push('Orchard actions malformed')
+    else if (actions.length === 0) failures.push('no Orchard actions')
+    else {
+      count = actions.length
+      actions.forEach((a, i) => {
+        if (!isObject(a)) failures.push(`Orchard action ${i} malformed`)
+        else for (const [k, bytes] of Object.entries(ACTION_BYTES)) hexField(a[k], bytes, `Orchard action ${i} ${k}`)
+      })
+      // Required for a nonempty bundle.
+      hexField(orchard.anchor, 32, 'Orchard anchor')
+      hexField(orchard.proof, ORCHARD_PROOF_BYTES(count), 'Orchard proof')
+      hexField(orchard.bindingSig, 64, 'Orchard bindingSig')
+    }
+    const flags = orchard.flags
+    if (flags === undefined) gaps.push('Orchard flags missing')
+    else if (!isObject(flags) || typeof flags.enableSpends !== 'boolean' || typeof flags.enableOutputs !== 'boolean') failures.push('Orchard flags malformed')
+    else {
+      if (!flags.enableSpends) failures.push('Orchard spends disabled (value did not come from Orchard)')
+      if (!flags.enableOutputs) failures.push('Orchard outputs disabled (value did not go to Orchard)')
+    }
+    // With no transparent, Sprout or Sapling value, the Orchard balance is the whole fee.
+    if (orchard.valueBalanceZat === undefined) gaps.push('Orchard valueBalanceZat missing')
+    const fee = balance(orchard.valueBalance, orchard.valueBalanceZat, 'Orchard')
+    if (fee !== undefined && fee <= 0) failures.push('Orchard value balance is not a positive fee')
 
-  if (reasons.length) return fail(...reasons)
-  return { fullyShielded: true, verdict: 'orchard_only', orchardActions: (actions as unknown[]).length, feeZatoshis: fee as number }
+    const verdict = result()
+    if (verdict) return verdict
+    return { fullyShielded: true, verdict: 'orchard_only', orchardActions: count, feeZatoshis: fee as number }
+  }
+  return result() ?? { fullyShielded: false, verdict: 'unverified', reasons: ['orchard bundle missing'] }
 }
