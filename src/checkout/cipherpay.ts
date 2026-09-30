@@ -37,8 +37,13 @@ export interface ProviderInvoice {
   receivedZatoshis: number
   paymentAddress: string
   zcashUri: string
+  // Moves: upstream extends it by 30 minutes on detection and 10 minutes on underpayment/recording.
   expiresAt: string
   detectedTxid: string | null
+  // When the scanner first saw the payment (reset if an underpaid invoice is later topped up) and
+  // when it confirmed it. Whole-second UTC stamps; null until the event happens.
+  detectedAt: string | null
+  confirmedAt: string | null
 }
 
 export type CreateOutcome =
@@ -158,6 +163,7 @@ export function parseInvoice(body: Record<string, unknown>): ProviderInvoice | u
   if (b.amount !== null && b.amount !== undefined && !isPositiveFinite(b.amount)) return undefined
   if (b.currency !== null && b.currency !== undefined && !isString(b.currency, 10)) return undefined
   if (b.detected_txid !== null && b.detected_txid !== undefined && !(typeof b.detected_txid === 'string' && TXID.test(b.detected_txid))) return undefined
+  for (const key of ['detected_at', 'confirmed_at']) if (b[key] !== null && b[key] !== undefined && !isTimestamp(b[key])) return undefined
   return {
     id: b.id,
     memoCode: b.memo_code,
@@ -171,6 +177,8 @@ export function parseInvoice(body: Record<string, unknown>): ProviderInvoice | u
     zcashUri: b.zcash_uri,
     expiresAt: b.expires_at,
     detectedTxid: (b.detected_txid as string | null | undefined) ?? null,
+    detectedAt: (b.detected_at as string | null | undefined) ?? null,
+    confirmedAt: (b.confirmed_at as string | null | undefined) ?? null,
   }
 }
 

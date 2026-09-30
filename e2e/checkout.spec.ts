@@ -158,6 +158,7 @@ test('a provider timeout stops for review instead of making a second invoice', a
 test('private recovery: the code reopens the order in a fresh tab; a public reference does not', async ({ page, context }) => {
   const code = await startOrder(page)
   await getInvoice(page)
+  await expect(page.locator('#co-address')).not.toBeEmpty()
   const address = await page.locator('#co-address').textContent()
   const reference = await page.locator('#co-reference').textContent()
 

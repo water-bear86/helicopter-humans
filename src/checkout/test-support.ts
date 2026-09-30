@@ -341,6 +341,144 @@ export function serviceContract(name: string, makeStore: () => Promise<OrderStor
       expect(await h.service.refresh(two.code)).toMatchObject({ state: 'reconciliation_required', stateReason: 'provider_price_changed' })
     })
 
+    // Timing uses the fixture clock with upstream's stamps: detection sets `detected_at` and moves
+    // `expires_at` to now + 30 min, confirmation sets `confirmed_at`. Quotes last 30 minutes.
+    it('an on-time payment that confirms after the deadline grants, even when nobody refreshed in between', async () => {
+      const h = harness(await makeStore())
+      const { code, invoiceId, view } = await paidOrder(h)
+      const deadline = Date.parse(view.payment!.expiresAt)
+      h.clock.t = deadline - 60_000
+      h.provider.pay(invoiceId, h.provider.invoices.get(invoiceId)!.price_zatoshis)
+      // The provider's normal scanner extension is accepted, and never shown as a new deadline.
+      expect(Date.parse(h.provider.invoices.get(invoiceId)!.expires_at)).toBeGreaterThan(deadline)
+      h.clock.t = deadline + 20 * 60_000
+      h.provider.confirm(invoiceId)
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'fulfilled', receipt: { revoked: false } })
+    })
+
+    it('an on-time detection seen before the deadline still grants when confirmation lands after it', async () => {
+      const h = harness(await makeStore())
+      const { code, invoiceId, view } = await paidOrder(h)
+      const deadline = Date.parse(view.payment!.expiresAt)
+      h.clock.t = deadline - 5 * 60_000
+      h.provider.pay(invoiceId, h.provider.invoices.get(invoiceId)!.price_zatoshis)
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'payment_detected', payment: null })
+      h.clock.t = deadline + 25 * 60_000
+      h.provider.confirm(invoiceId)
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'fulfilled', receipt: { revoked: false } })
+    })
+
+    it('a payment detected after the deadline needs resolution even if the expiry refresh was missed', async () => {
+      const h = harness(await makeStore())
+      const { code, invoiceId, view } = await paidOrder(h)
+      h.clock.t = Date.parse(view.payment!.expiresAt) + 60_000
+      // Scanner lag: the provider never reported `expired` before the late payment arrived.
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'awaiting_payment', payment: null })
+      h.provider.pay(invoiceId, h.provider.invoices.get(invoiceId)!.price_zatoshis)
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'needs_resolution', stateReason: 'payment_after_expiry', receipt: null })
+      h.provider.confirm(invoiceId)
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'needs_resolution', stateReason: 'payment_after_expiry', receipt: null })
+    })
+
+    it('a confirmed payment without provider timing is held for review, not granted', async () => {
+      const h = harness(await makeStore())
+      const { code, invoiceId } = await paidOrder(h)
+      h.provider.pay(invoiceId, h.provider.invoices.get(invoiceId)!.price_zatoshis)
+      h.provider.confirm(invoiceId)
+      h.provider.invoices.get(invoiceId)!.detected_at = null
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'needs_resolution', stateReason: 'payment_timing_unknown', receipt: null })
+    })
+
+    it('an unpaid quote whose provider deadline moved is not shown again', async () => {
+      const h = harness(await makeStore())
+      const { code, invoiceId } = await paidOrder(h)
+      const inv = h.provider.invoices.get(invoiceId)!
+      inv.expires_at = new Date(Date.parse(inv.expires_at) + 24 * 60 * 60_000).toISOString().replace('.000Z', 'Z')
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'reconciliation_required', stateReason: 'provider_deadline_changed', payment: null })
+    })
+
+    it('the buyer never sees a payable quote past the original deadline', async () => {
+      const h = harness(await makeStore())
+      const { code, view } = await paidOrder(h)
+      h.clock.t = Date.parse(view.payment!.expiresAt) + 1_000
+      expect((await h.service.refresh(code)).payment).toBeNull()
+    })
+
+    it.each([
+      ['fiat amount', (i: { amount: number }) => void (i.amount = 123), 'provider_fiat_terms_changed'],
+      ['currency', (i: { currency: string }) => void (i.currency = 'EUR'), 'provider_fiat_terms_changed'],
+      ['floating price', (i: { price_zec: number }) => void (i.price_zec *= 2), 'provider_price_zec_changed'],
+    ] as const)('changed %s after display withholds the receipt', async (_label, change, reason) => {
+      const h = harness(await makeStore())
+      const { code, invoiceId } = await paidOrder(h)
+      const inv = h.provider.invoices.get(invoiceId)!
+      ;(change as (i: typeof inv) => void)(inv)
+      h.provider.pay(invoiceId, inv.price_zatoshis)
+      h.provider.confirm(invoiceId)
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'reconciliation_required', stateReason: reason, receipt: null })
+    })
+
+    it('a changed terms read after fulfilment revokes the receipt', async () => {
+      const h = harness(await makeStore())
+      const { code, invoiceId } = await paidOrder(h)
+      h.provider.pay(invoiceId, h.provider.invoices.get(invoiceId)!.price_zatoshis)
+      h.provider.confirm(invoiceId)
+      expect((await h.service.refresh(code)).state).toBe('fulfilled')
+      h.provider.invoices.get(invoiceId)!.amount = 123
+      expect(await h.service.refresh(code)).toMatchObject({ state: 'reconciliation_required', receipt: { revoked: true } })
+    })
+
+    it('a changed global offer neither reprices an existing order nor quotes it again', async () => {
+      const h = harness(await makeStore())
+      const { code, invoiceId } = await paidOrder(h)
+      const next = createCheckoutService({
+        store: h.store,
+        provider: h.client,
+        offer: { ...DRAFT_OFFER, version: '2026-10-01-draft-2', fiatAmountCents: 1200 },
+        now: () => h.clock.t,
+      })
+      expect((await next.refresh(code)).state).toBe('awaiting_payment')
+      h.provider.expire(invoiceId)
+      expect((await next.refresh(code)).state).toBe('expired')
+      await expectCode(next.ensureInvoice(code, { newQuote: true }), 'action_not_allowed')
+      expect(h.provider.calls.create).toBe(1)
+    })
+
+    it('a new quote is refused while an earlier invoice cannot be read', async () => {
+      const h = harness(await makeStore())
+      const { code, invoiceId } = await paidOrder(h)
+      h.provider.expire(invoiceId)
+      expect((await h.service.refresh(code)).state).toBe('expired')
+      h.provider.pay(invoiceId, h.provider.invoices.get(invoiceId)!.price_zatoshis)
+      const blind = createCheckoutService({
+        store: h.store,
+        offer: DRAFT_OFFER,
+        now: () => h.clock.t,
+        provider: { createInvoice: h.client.createInvoice, getInvoice: async () => ({ kind: 'unavailable', reason: 'network_or_timeout' }) },
+      })
+      expect(await blind.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'expired', notice: 'provider_unavailable', payment: null })
+      expect(h.provider.calls.create).toBe(1)
+      // Once the old invoice can be read, the money on it stops the replacement for good.
+      expect(await h.service.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'needs_resolution', stateReason: 'payment_after_expiry', payment: null })
+      expect(h.provider.calls.create).toBe(1)
+      await expectCode(h.service.ensureInvoice(code, { newQuote: true }), 'action_not_allowed')
+    })
+
+    it('a new quote reconciles every earlier invoice, not just the last one', async () => {
+      const h = harness(await makeStore())
+      const { code, invoiceId: first } = await paidOrder(h)
+      h.provider.expire(first)
+      await h.service.refresh(code)
+      const second = await h.service.ensureInvoice(code, { newQuote: true })
+      const secondId = activeInvoiceId(h, second.payment!.address)
+      h.provider.expire(secondId)
+      await h.service.refresh(code)
+      const inv = h.provider.invoices.get(first)!
+      inv.received_zatoshis = inv.price_zatoshis
+      expect(await h.service.ensureInvoice(code, { newQuote: true })).toMatchObject({ state: 'needs_resolution', stateReason: 'payment_on_replaced_quote', payment: null })
+      expect(h.provider.calls.create).toBe(2)
+    })
+
     it('a store failure before the claim means no provider call; a failure after it means no second invoice', async () => {
       let failing = false
       const base = await makeStore()

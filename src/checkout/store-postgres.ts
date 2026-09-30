@@ -77,7 +77,10 @@ function invoiceFromRow(r: Record<string, unknown>): InvoiceRow {
     priceZec: Number(r.price_zec),
     priceZatoshis: toSafeIntOrNull(r.price_zatoshis),
     paymentUri: (r.payment_uri as string | null) ?? null,
-    expiresAt: toIso(r.expires_at),
+    quoteExpiresAt: toIso(r.quote_expires_at),
+    providerExpiresAt: toIso(r.provider_expires_at),
+    detectedAt: toIsoOrNull(r.detected_at),
+    confirmedAt: toIsoOrNull(r.confirmed_at),
     providerStatus: String(r.provider_status),
     receivedZatoshis: toSafeInt(r.received_zatoshis),
     rejectedReason: (r.rejected_reason as string | null) ?? null,
@@ -127,7 +130,9 @@ const INVOICE_COLUMNS: Record<string, string> = {
   providerStatus: 'provider_status',
   receivedZatoshis: 'received_zatoshis',
   rejectedReason: 'rejected_reason',
-  expiresAt: 'expires_at',
+  providerExpiresAt: 'provider_expires_at',
+  detectedAt: 'detected_at',
+  confirmedAt: 'confirmed_at',
   updatedAt: 'updated_at',
 }
 
@@ -277,10 +282,10 @@ export class PostgresOrderStore implements OrderStore {
       if (inv.orderId !== orderId) throw new StoreConflictError('invoice does not belong to order')
       await db.query(
         `INSERT INTO checkout_invoices (provider_invoice_id, order_id, memo_code, payment_address, price_zec, price_zatoshis, payment_uri,
-           expires_at, provider_status, received_zatoshis, rejected_reason, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+           quote_expires_at, provider_expires_at, detected_at, confirmed_at, provider_status, received_zatoshis, rejected_reason, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
         [inv.providerInvoiceId, inv.orderId, inv.memoCode, inv.paymentAddress, inv.priceZec, inv.priceZatoshis, inv.paymentUri,
-          inv.expiresAt, inv.providerStatus, inv.receivedZatoshis, inv.rejectedReason, inv.createdAt, inv.updatedAt],
+          inv.quoteExpiresAt, inv.providerExpiresAt, inv.detectedAt, inv.confirmedAt, inv.providerStatus, inv.receivedZatoshis, inv.rejectedReason, inv.createdAt, inv.updatedAt],
       )
     }
     for (const patch of changes.updateInvoices ?? []) {

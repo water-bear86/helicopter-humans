@@ -41,7 +41,8 @@ export const DRAFT_OFFER: Offer = Object.freeze({
 })
 
 // Amount sent to the provider's `amount` field. 900 cents -> 9. Exact for every whole-cent value.
-export function providerAmount(offer: Offer): number {
-  if (!Number.isSafeInteger(offer.fiatAmountCents) || offer.fiatAmountCents <= 0) throw new RangeError('offer amount must be positive integer cents')
-  return offer.fiatAmountCents / 100
+// Takes an offer or an order: an order's stored amount is what its invoices are checked against.
+export function providerAmount(terms: Pick<Offer, 'fiatAmountCents'>): number {
+  if (!Number.isSafeInteger(terms.fiatAmountCents) || terms.fiatAmountCents <= 0) throw new RangeError('offer amount must be positive integer cents')
+  return terms.fiatAmountCents / 100
 }

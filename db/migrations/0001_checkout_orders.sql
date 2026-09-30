@@ -44,7 +44,13 @@ CREATE TABLE checkout_invoices (
   price_zec double precision NOT NULL CHECK (price_zec > 0),
   price_zatoshis bigint CHECK (price_zatoshis > 0 AND price_zatoshis <= 9007199254740991),
   payment_uri text CHECK (length(payment_uri) <= 2048),
-  expires_at timestamptz NOT NULL,
+  -- The deadline shown to the buyer, fixed at creation. Payment timing is judged against it.
+  quote_expires_at timestamptz NOT NULL,
+  -- Latest provider expiry; upstream extends it when its scanner detects or records a payment.
+  provider_expires_at timestamptz NOT NULL,
+  -- Provider observation timestamps, as reported by the public invoice GET.
+  detected_at timestamptz,
+  confirmed_at timestamptz,
   provider_status text NOT NULL CHECK (length(provider_status) <= 32),
   received_zatoshis bigint NOT NULL DEFAULT 0 CHECK (received_zatoshis >= 0 AND received_zatoshis <= 9007199254740991),
   rejected_reason text CHECK (length(rejected_reason) <= 200),

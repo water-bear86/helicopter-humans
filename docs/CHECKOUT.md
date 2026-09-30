@@ -42,8 +42,8 @@ The free redactor does not import or call any of this. An e2e test checks that u
    - Any other status (including 408/499 from a proxy), timeout, network error, oversized or malformed body: the outcome is unknown, so the order moves to `reconciliation_required`. No second invoice is created automatically.
    - A claim that is never released (crash) becomes `reconciliation_required` on the next access after its expiry.
    - An ordinary retry returns the existing invoice. Concurrent retries get 409 `invoice_creation_in_progress` while the claim is held.
-3. `refresh` reads each of the order's invoices once (at most three), with the client timeout. There is no polling loop, no background process and no webhook in this slice.
-4. `new_quote` replaces an `expired` zero-paid or `quote_rejected` quote. It is a deliberate buyer action, never a retry side effect. There are at most three quotes per order.
+3. `refresh` reads each of the order's invoices once (at most three), with the client timeout. There is no polling loop, no background process and no webhook in this slice. Every read is rechecked against the order's stored terms (currency, fiat amount) and the invoice's original `price_zec`, integer amount and URI; any change moves the order to `reconciliation_required` and revokes a receipt. A later change of the global offer never reinterprets an existing order.
+4. `new_quote` replaces an `expired` zero-paid or `quote_rejected` quote. It is a deliberate buyer action, never a retry side effect. There are at most three quotes per order, all under the order's own offer version. Before claiming, it reads every earlier invoice outside any transaction, then applies those reads and rechecks the locked order in the claim's transaction. If any read is unavailable, or any earlier invoice shows money, no invoice is created and no payable details are returned.
 5. `cancel` is allowed only before anything has been received.
 6. `request_refund` records a checksummed shielded mainnet address (`u1…` Bech32m or `zs1…` Bech32) for an order that has received ZEC. It is authenticated only by the recovery code. The same transaction revokes any receipt and moves the order to `needs_resolution` (`refund_requested`): asking for the money back gives up the preorder. The provider's public write-once refund-address endpoint is never used as ownership proof. Refunds are manual from the operator wallet, and no key enters this app.
 
@@ -68,6 +68,12 @@ Every action names only itself. Requests carrying `invoiceId`, `memo`, `txid`, `
 | `refunded` | Provider marked the invoice refunded; any receipt is revoked | no |
 
 `needs_resolution`, `reconciliation_required`, `quarantined` and `refunded` are not left by a provider read, only moved to something more severe; an operator resolves them. A provider read older than what is stored (lower received amount or earlier status, from two refreshes racing) is ignored. A fulfilled order moves only for a provider refund or a more severe finding, and its receipt is then revoked. The page never tells a buyer who may have paid to pay again.
+
+### Payment timing
+
+The deadline shown to the buyer is the provider's `expires_at` at creation, stored as `quote_expires_at` and never changed. Upstream legitimately extends `expires_at` when its scanner detects a payment (+30 min) or records an underpayment (+10 min); that value is kept separately as `provider_expires_at` and never shown or used for timing. An unpaid `pending` invoice whose `expires_at` moved is `reconciliation_required`.
+
+A payment is on time when the provider's `detected_at` is at or before `quote_expires_at`. It may confirm later (`confirmed_at` after the deadline) and still grants. A payment detected after the deadline goes to `needs_resolution` (`payment_after_expiry`) on every read, whether or not anyone refreshed while the quote expired. A detected or confirmed invoice without a `detected_at`, or confirmed without a consistent `confirmed_at`, goes to `needs_resolution` (`payment_timing_unknown`) for an operator. There is no grace period for scanner lag: a payment broadcast just before the deadline but detected after it is reviewed manually.
 
 A multi-payment invoice is legitimate: each txid the provider reports is claimed for that order without quarantine, and the invoice is granted when the provider confirms the full amount. If a partial payment was observed first, the order is already in `needs_resolution` and stays there for the operator. A txid already claimed by another order quarantines the second order. Upstream confirms at 99.5% of the price; we grant only at 100% and send anything less to `needs_resolution`.
 
@@ -128,7 +134,7 @@ Webhooks are deferred. When added, the webhook secret is another server-only var
 
 ## Tests
 
-- `src/checkout/test-support.ts`: one service contract (isolation, retries, ambiguous creates, abandoned claims, fee recipient, amount mismatch, underpayment, multi-payment, late payment, cancel, txid reuse, provider refund, store outage). It runs against the memory store (`service.test.ts`) and real PostgreSQL (`store-postgres.test.ts`).
+- `src/checkout/test-support.ts`: one service contract (isolation, retries, ambiguous creates, abandoned claims, fee recipient, amount mismatch, underpayment, multi-payment, late payment with and without a missed expiry refresh, on-time payment confirmed after the deadline, missing payment timestamps, moved pending deadline, changed fiat/currency/floating price after display, changed global offer, replacement blocked by an unreadable or paid earlier invoice, cancel, txid reuse, provider refund, store outage). It runs against the memory store (`service.test.ts`) and real PostgreSQL (`store-postgres.test.ts`).
 - `src/checkout/store-postgres.test.ts` also checks the schema constraints directly, races two orders for one txid across connections, runs the migration twice, and maps store errors. It needs a disposable server:
 
   ```sh

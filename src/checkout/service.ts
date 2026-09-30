@@ -3,17 +3,22 @@
 // Trust rules, in one place:
 // - The buyer is identified only by the recovery code (hashed at rest). Invoice ids, memo codes and
 //   txids are public metadata and are never accepted from the buyer at all.
-// - Price, currency and product come from the server-side offer. The provider's invoice id is stored
-//   when we create it and is the only invoice this order ever reads.
+// - Price, currency and product come from the server-side offer, copied onto the order when it is
+//   created. Every later provider read is checked against the order's stored terms and the invoice's
+//   original values, never against whatever the global offer says now.
+// - The provider's invoice id is stored when we create it and is the only invoice this order reads.
 // - Nothing is payable until the provider's GET has confirmed the integer amount and the payment URI
 //   has exactly one recipient, our invoice address, for exactly that amount.
+// - The buyer's deadline is the provider expiry at creation and never moves. A payment grants only if
+//   the provider detected it by that deadline; it may confirm later.
 // - Only `confirmed` with the full amount on the active invoice grants, inside the order lock, once.
+// - A replacement quote is created only after every earlier invoice was read and shows nothing paid.
 import { shieldedAddressKind, maskAddress } from './address.js'
 import type { CreatedInvoice, InvoiceProvider, ProviderInvoice, ReadOutcome } from './cipherpay.js'
 import { hashRecoveryCode, isRecoveryCode, newId, newRecoveryCode } from './credential.js'
 import { providerAmount, type Offer } from './offer.js'
 import { zatoshisToZec } from '../payments/zec.js'
-import type { InvoicePatch, InvoiceRow, OrderChanges, OrderSnapshot, OrderState, OrderStore, OrderTx } from './store.js'
+import type { InvoicePatch, InvoiceRow, OrderChanges, OrderRow, OrderSnapshot, OrderState, OrderStore, OrderTx } from './store.js'
 import { checkPaymentUri } from './zip321.js'
 
 export type CheckoutErrorCode =
@@ -115,6 +120,31 @@ function totalReceived(snapshot: OrderSnapshot): number {
   return snapshot.invoices.reduce((sum, i) => sum + i.receivedZatoshis, 0)
 }
 
+// Upstream stamps whole seconds; compare at that precision (storage may round sub-second parts).
+function seconds(timestamp: string): number {
+  return Math.floor(Date.parse(timestamp) / 1000)
+}
+
+// Terms the provider reports must still be the ones this order and invoice were created with.
+function termsMismatch(order: OrderRow, row: InvoiceRow, p: ProviderInvoice): string | null {
+  if (p.currency !== order.fiatCurrency || p.amount !== providerAmount(order)) return 'fiat_terms_changed'
+  if (p.priceZec !== row.priceZec) return 'price_zec_changed'
+  return null
+}
+
+// Whether a received payment beat the buyer's deadline, by the provider's own detection stamp. The
+// provider's moving `expires_at` plays no part. Missing or contradictory stamps are `unknown`.
+function paymentTiming(row: InvoiceRow, p: ProviderInvoice): 'on_time' | 'late' | 'unknown' {
+  if (!p.detectedAt) return 'unknown'
+  if (p.status === 'confirmed' && (!p.confirmedAt || Date.parse(p.confirmedAt) < Date.parse(p.detectedAt))) return 'unknown'
+  return seconds(p.detectedAt) <= seconds(row.quoteExpiresAt) ? 'on_time' : 'late'
+}
+
+// Findings for a payment that arrived but must not be granted automatically.
+function untimely(timing: 'late' | 'unknown'): Finding {
+  return { state: 'needs_resolution', reason: timing === 'late' ? 'payment_after_expiry' : 'payment_timing_unknown' }
+}
+
 export function createCheckoutService(options: CheckoutServiceOptions) {
   const { store, provider, offer } = options
   const now = options.now ?? Date.now
@@ -137,7 +167,7 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
     const { order } = s
     const active = s.invoices.find((i) => i.providerInvoiceId === order.activeInvoiceId) ?? null
     const payable =
-      order.state === 'awaiting_payment' && active?.paymentUri && active.priceZatoshis !== null && Date.parse(active.expiresAt) > now() ? active : null
+      order.state === 'awaiting_payment' && active?.paymentUri && active.priceZatoshis !== null && Date.parse(active.quoteExpiresAt) > now() ? active : null
     const received = totalReceived(s)
     return {
       state: order.state,
@@ -151,7 +181,7 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
             amountZatoshis: payable.priceZatoshis as number,
             address: payable.paymentAddress,
             uri: payable.paymentUri as string,
-            expiresAt: payable.expiresAt,
+            expiresAt: payable.quoteExpiresAt,
             reference: payable.memoCode,
           }
         : null,
@@ -186,21 +216,32 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
 
   // ---- Validation of provider data ------------------------------------------------------------
 
+  function observed(row: InvoiceRow, p: ProviderInvoice): InvoicePatch {
+    return {
+      providerInvoiceId: row.providerInvoiceId,
+      providerStatus: p.status,
+      receivedZatoshis: p.receivedZatoshis,
+      providerExpiresAt: p.expiresAt,
+      detectedAt: p.detectedAt,
+      confirmedAt: p.confirmedAt,
+      updatedAt: iso(),
+    }
+  }
+
   // First read after creation: the only way an invoice becomes payable.
-  function verifyNewInvoice(row: InvoiceRow, p: ProviderInvoice): { patch: InvoicePatch; finding: Finding } {
-    const base = { providerInvoiceId: row.providerInvoiceId, providerStatus: p.status, receivedZatoshis: p.receivedZatoshis, updatedAt: iso() }
+  function verifyNewInvoice(order: OrderRow, row: InvoiceRow, p: ProviderInvoice): { patch: InvoicePatch; finding: Finding } {
+    const base = observed(row, p)
     const reject = (reason: string, state: OrderState = 'quote_rejected') => ({
       patch: { ...base, rejectedReason: reason },
       finding: { state, reason },
     })
     // Someone paid an address we never showed, or the invoice already moved on: an operator must look.
     if (p.status !== 'pending' || p.receivedZatoshis !== 0) return reject(`unexpected_status_before_display:${p.status}`, p.receivedZatoshis > 0 ? 'needs_resolution' : 'reconciliation_required')
-    if (p.currency !== offer.fiatCurrency || p.amount !== providerAmount(offer)) return reject('fiat_terms_mismatch')
+    if (p.currency !== order.fiatCurrency || p.amount !== providerAmount(order)) return reject('fiat_terms_mismatch')
     if (p.priceZec !== row.priceZec) return reject('price_changed_since_create')
     // Upstream computes price_zatoshis = round(price_zec * 1e8) in f64; recompute the same way.
     if (Math.round(p.priceZec * 1e8) !== p.priceZatoshis) return reject('price_zatoshis_inconsistent')
-    // Upstream stamps whole seconds; compare at that precision (storage may round sub-second parts).
-    if (Math.floor(Date.parse(p.expiresAt) / 1000) !== Math.floor(Date.parse(row.expiresAt) / 1000)) return reject('expiry_changed_since_create')
+    if (seconds(p.expiresAt) !== seconds(row.quoteExpiresAt)) return reject('expiry_changed_since_create')
     const uri = checkPaymentUri(p.zcashUri, { address: row.paymentAddress, amountZatoshis: p.priceZatoshis, memoCode: row.memoCode })
     if (!uri.ok) return reject(`payment_uri_${uri.reason}`)
     return {
@@ -209,24 +250,24 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
     }
   }
 
-  // Later reads: identity and price must not have changed; status decides the order state.
+  // Later reads: identity, terms and price must not have changed; timing and status decide the state.
   async function classify(
     s: OrderSnapshot,
     row: InvoiceRow,
     p: ProviderInvoice,
     tx: OrderTx,
   ): Promise<{ patch: InvoicePatch; finding: Finding; grant: boolean }> {
-    const patch: InvoicePatch = {
-      providerInvoiceId: row.providerInvoiceId,
-      providerStatus: p.status,
-      receivedZatoshis: p.receivedZatoshis,
-      expiresAt: p.expiresAt,
-      updatedAt: iso(),
-    }
+    const patch = observed(row, p)
+    const inconsistent = (reason: string) => ({ patch, finding: { state: 'reconciliation_required' as const, reason }, grant: false })
     const price = row.priceZatoshis as number
-    if (p.priceZatoshis !== price) return { patch, finding: { state: 'reconciliation_required', reason: 'provider_price_changed' }, grant: false }
+    const terms = termsMismatch(s.order, row, p)
+    if (terms) return inconsistent(`provider_${terms}`)
+    if (p.priceZatoshis !== price) return inconsistent('provider_price_changed')
     const uri = checkPaymentUri(p.zcashUri, { address: row.paymentAddress, amountZatoshis: price, memoCode: row.memoCode })
-    if (!uri.ok) return { patch, finding: { state: 'reconciliation_required', reason: `provider_uri_changed:${uri.reason}` }, grant: false }
+    if (!uri.ok) return inconsistent(`provider_uri_changed:${uri.reason}`)
+    // Upstream moves the deadline only when its scanner records a payment. An unpaid invoice whose
+    // deadline moved is not the quote the buyer saw.
+    if (p.status === 'pending' && p.receivedZatoshis === 0 && seconds(p.expiresAt) !== seconds(row.quoteExpiresAt)) return inconsistent('provider_deadline_changed')
 
     // A txid bound to another order is never granted twice. Several txids on one invoice are fine:
     // each is claimed by this order in turn.
@@ -248,14 +289,18 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
       const finding: Finding = received > 0 ? { state: 'needs_resolution', reason: 'payment_after_cancel' } : { state: 'cancelled', reason: s.order.stateReason }
       return { patch, finding, grant: false }
     }
+    // Judged on every read, so a missed `expired` read cannot turn a late payment into a grant.
+    const timing = paymentTiming(row, p)
     switch (p.status) {
       case 'pending':
         return { patch, finding: received > 0 ? { state: 'needs_resolution', reason: 'partial_payment' } : { state: 'awaiting_payment', reason: null }, grant: false }
       case 'underpaid':
         return { patch, finding: { state: 'needs_resolution', reason: 'underpaid' }, grant: false }
       case 'detected':
+        if (timing !== 'on_time') return { patch, finding: untimely(timing), grant: false }
         return { patch, finding: { state: 'payment_detected', reason: null }, grant: false }
       case 'confirmed':
+        if (timing !== 'on_time') return { patch, finding: untimely(timing), grant: false }
         if (received < price) return { patch, finding: { state: 'needs_resolution', reason: 'confirmed_below_quote' }, grant: false }
         return { patch, finding: { state: 'fulfilled', reason: received > price ? 'overpaid' : null }, grant: true }
       case 'expired':
@@ -296,7 +341,7 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
         continue
       }
       if (row.priceZatoshis === null) {
-        const checked = verifyNewInvoice(row, p)
+        const checked = verifyNewInvoice(o, row, p)
         updates.push(checked.patch)
         if (isActive) derived = checked.finding
         else if (checked.finding.state !== 'quote_rejected') other = worst(other, checked.finding)
@@ -390,7 +435,10 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
       priceZec: created.priceZec,
       priceZatoshis: null,
       paymentUri: null,
-      expiresAt: created.expiresAt,
+      quoteExpiresAt: created.expiresAt,
+      providerExpiresAt: created.expiresAt,
+      detectedAt: null,
+      confirmedAt: null,
       providerStatus: 'created',
       receivedZatoshis: 0,
       rejectedReason,
@@ -432,17 +480,31 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
       const s = await load(code)
       const orderId = s.order.id
       const token = newId()
-      type Claim = 'unchanged' | 'in_progress' | 'not_allowed' | 'quote_limit' | { previous: OrderState }
-      const claim = await store.update<Claim>(orderId, (cur) => {
-        const o = cur.order
+      // Before a replacement, read every earlier invoice now: money may have reached one since it was
+      // last seen. The reads happen outside any transaction; the claim below applies them to the
+      // locked, current order and rechecks it, so concurrent refresh, cancel or refund stay safe.
+      const prior = newQuote ? await readInvoices(s) : undefined
+      type Claim = 'unchanged' | 'unreconciled' | 'in_progress' | 'not_allowed' | 'quote_limit' | { previous: OrderState }
+      const claim = await store.update<Claim>(orderId, async (cur, tx) => {
         const stale = staleClaimChanges(cur)
         if (stale) return { changes: stale, result: 'unchanged' }
-        if (o.state === 'creating_invoice') return { result: 'in_progress' }
-        if (newQuote ? !REPLACEABLE.has(o.state) : o.state !== 'new') return { result: newQuote ? 'not_allowed' : 'unchanged' }
-        if (o.quoteCount >= maxQuotes) return { result: 'quote_limit' }
+        const reconciled = prior ? await decide(cur, prior.reads, tx) : undefined
+        const o = { ...cur.order, ...reconciled?.order }
+        const keep = (result: Claim) => ({ changes: reconciled, result })
+        if (o.state === 'creating_invoice') return keep('in_progress')
+        if (newQuote && !REPLACEABLE.has(o.state)) return keep(REPLACEABLE.has(cur.order.state) ? 'unchanged' : 'not_allowed')
+        if (!newQuote && o.state !== 'new') return keep('unchanged')
+        // Unavailable, or an invoice we did not read: we cannot know nothing was paid. No new quote.
+        const unread = cur.invoices.some((i) => !i.rejectedReason && prior?.reads.get(i.providerInvoiceId)?.kind !== 'ok')
+        if (prior && (prior.unavailable || unread)) return keep('unreconciled')
+        // Terms are the order's; a changed global offer never reprices or relabels an existing order.
+        if (o.offerId !== offer.id || o.offerVersion !== offer.version) return keep('not_allowed')
+        if (o.quoteCount >= maxQuotes) return keep('quote_limit')
         return {
           changes: {
+            ...reconciled,
             order: {
+              ...reconciled?.order,
               state: 'creating_invoice',
               stateReason: null,
               claimToken: token,
@@ -458,8 +520,10 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
       if (claim === 'not_allowed') throw new CheckoutError('action_not_allowed', 409)
       if (claim === 'quote_limit') throw new CheckoutError('quote_limit_reached', 409)
       if (claim === 'unchanged') return view(await reload(orderId))
+      if (claim === 'unreconciled') return view(await reload(orderId), 'provider_unavailable')
 
-      const outcome = await provider.createInvoice({ productName: offer.providerProductName, amount: providerAmount(offer), currency: offer.fiatCurrency })
+      const terms = s.order
+      const outcome = await provider.createInvoice({ productName: offer.providerProductName, amount: providerAmount(terms), currency: terms.fiatCurrency })
 
       if (outcome.kind !== 'created') {
         // 4xx: certainly nothing created, so the order returns to where it was. Anything else may have
@@ -480,7 +544,7 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
       }
 
       const created = outcome.invoice
-      const termsOk = created.currency === offer.fiatCurrency && created.amount === providerAmount(offer)
+      const termsOk = created.currency === terms.fiatCurrency && created.amount === providerAmount(terms)
       await store.update(orderId, (cur) => {
         const stamp = iso()
         const row = invoiceRow(orderId, created, stamp, termsOk ? null : 'fiat_terms_mismatch')

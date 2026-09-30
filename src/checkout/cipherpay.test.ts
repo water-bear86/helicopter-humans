@@ -29,6 +29,8 @@ function invoiceBody(overrides: Record<string, unknown> = {}) {
     zcash_uri: `zcash:${address}?amount=0.00639722&memo=Q1AtMEExQjJDM0Q`,
     expires_at: '2026-10-01T00:30:00Z',
     detected_txid: null,
+    detected_at: null,
+    confirmed_at: null,
     ...overrides,
   }
 }
@@ -89,10 +91,22 @@ describe('CipherPay client', () => {
       JSON.stringify(invoiceBody({ received_zatoshis: 1.5 })),
       JSON.stringify(invoiceBody({ price_zec: 'NaN' })),
       JSON.stringify(invoiceBody({ detected_txid: 'not-a-txid' })),
+      JSON.stringify(invoiceBody({ detected_at: 'yesterday' })),
+      JSON.stringify(invoiceBody({ confirmed_at: 1759278600 })),
       JSON.stringify(invoiceBody({ id: 'CP-0A1B2C3D' })),
     ]
     for (const body of cases) expect(await client(reply(body)).getInvoice(ID)).toEqual({ kind: 'unavailable', reason: 'malformed_response' })
     expect(await client(reply({ error: 'Invoice not found' }, 404)).getInvoice(ID)).toEqual({ kind: 'not_found' })
+  })
+
+  it('reads the provider detection and confirmation stamps, which upstream omits until they happen', async () => {
+    const stamps = { status: 'confirmed', detected_at: '2026-10-01T00:29:00Z', confirmed_at: '2026-10-01T00:45:00Z', expires_at: '2026-10-01T00:59:00Z' }
+    expect(await client(reply(invoiceBody(stamps))).getInvoice(ID)).toMatchObject({
+      kind: 'ok',
+      invoice: { detectedAt: '2026-10-01T00:29:00Z', confirmedAt: '2026-10-01T00:45:00Z', expiresAt: '2026-10-01T00:59:00Z' },
+    })
+    const { detected_at: _d, confirmed_at: _c, ...absent } = invoiceBody()
+    expect(await client(reply(absent)).getInvoice(ID)).toMatchObject({ kind: 'ok', invoice: { detectedAt: null, confirmedAt: null } })
   })
 
   it('never builds a request path from anything but a provider UUID', async () => {

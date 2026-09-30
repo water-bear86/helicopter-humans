@@ -36,6 +36,8 @@ interface FixtureInvoice {
   zcash_uri: string
   status: string
   detected_txid: string | null
+  detected_at: string | null
+  confirmed_at: string | null
   received_zatoshis: number
   price_zatoshis: number
   expires_at: string
@@ -114,6 +116,8 @@ export function createFixtureCipherPay(options: FixtureCipherPayOptions = {}) {
       zcash_uri: uri,
       status: 'pending',
       detected_txid: null,
+      detected_at: null,
+      confirmed_at: null,
       received_zatoshis: 0,
       price_zatoshis: zatoshis,
       expires_at: stamp(now() + expiryMinutes * 60_000),
@@ -156,6 +160,8 @@ export function createFixtureCipherPay(options: FixtureCipherPayOptions = {}) {
       zcash_uri: inv.zcash_uri,
       status: inv.status,
       detected_txid: inv.detected_txid,
+      detected_at: inv.detected_at,
+      confirmed_at: inv.confirmed_at,
       expires_at: inv.expires_at,
       created_at: inv.created_at,
       price_zatoshis: inv.reported_price_zatoshis ?? inv.price_zatoshis,
@@ -215,20 +221,29 @@ export function createFixtureCipherPay(options: FixtureCipherPayOptions = {}) {
     queueCreate(...next: CreateScenario[]) {
       scenarios.push(...next)
     },
-    // Scanner behaviour from upstream: detected at >= 99.5% of price, underpaid below; payments to an
-    // expired invoice are still counted (a late payment).
+    // Scanner behaviour from upstream (src/invoices/mod.rs): detected at >= 99.5% of price, underpaid
+    // below. Detection stamps `detected_at` and moves `expires_at` to now + 30 minutes; underpayment
+    // to now + 10 minutes. Payments to an expired invoice are still counted (a late payment) without
+    // a status change. Timestamps use the fixture clock, so tests can pay before or after a deadline.
     pay(id: string, zatoshis: number, txid = randomBytes(32).toString('hex')) {
       const inv = get(id)
       inv.received_zatoshis += zatoshis
       inv.detected_txid = txid
       if (inv.status === 'pending' || inv.status === 'underpaid') {
-        inv.status = inv.received_zatoshis * 1000 >= inv.price_zatoshis * 995 ? 'detected' : 'underpaid'
+        const full = inv.received_zatoshis * 1000 >= inv.price_zatoshis * 995
+        inv.status = full ? 'detected' : 'underpaid'
+        inv.detected_at = stamp(now())
+        inv.expires_at = stamp(now() + (full ? 30 : 10) * 60_000)
       }
       return txid
     },
+    // mark_confirmed: stamps `confirmed_at`, leaves `expires_at` alone.
     confirm(id: string) {
       const inv = get(id)
-      if (inv.status === 'detected') inv.status = 'confirmed'
+      if (inv.status === 'detected') {
+        inv.status = 'confirmed'
+        inv.confirmed_at = stamp(now())
+      }
     },
     expire(id: string) {
       const inv = get(id)
@@ -247,6 +262,8 @@ export function createFixtureCipherPay(options: FixtureCipherPayOptions = {}) {
       inv.detected_txid = txid
       inv.received_zatoshis = zatoshis
       inv.status = 'confirmed'
+      inv.detected_at ??= stamp(now())
+      inv.confirmed_at ??= stamp(now())
     },
   }
 }

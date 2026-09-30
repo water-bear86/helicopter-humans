@@ -46,7 +46,14 @@ export interface InvoiceRow {
   priceZatoshis: number | null
   // Canonical single-recipient URI rebuilt from validated values; null until validated.
   paymentUri: string | null
-  expiresAt: string
+  // The deadline the buyer was shown: the provider's expiry at creation, never changed afterwards.
+  // Payment timing is judged against this, not against the provider's moving expiry.
+  quoteExpiresAt: string
+  // Latest provider expiry. Upstream moves it when the scanner detects or records a payment.
+  providerExpiresAt: string
+  // Provider observation timestamps from the public GET; null until the provider reports them.
+  detectedAt: string | null
+  confirmedAt: string | null
   providerStatus: string
   receivedZatoshis: number
   rejectedReason: string | null
@@ -83,7 +90,12 @@ export interface OrderSnapshot {
 }
 
 export type InvoicePatch = Pick<InvoiceRow, 'providerInvoiceId'> &
-  Partial<Pick<InvoiceRow, 'priceZatoshis' | 'paymentUri' | 'providerStatus' | 'receivedZatoshis' | 'rejectedReason' | 'expiresAt' | 'updatedAt'>>
+  Partial<
+    Pick<
+      InvoiceRow,
+      'priceZatoshis' | 'paymentUri' | 'providerStatus' | 'receivedZatoshis' | 'rejectedReason' | 'providerExpiresAt' | 'detectedAt' | 'confirmedAt' | 'updatedAt'
+    >
+  >
 
 export interface OrderChanges {
   order?: Partial<Omit<OrderRow, 'id' | 'credentialHash' | 'createdAt' | 'offerId' | 'offerVersion' | 'fiatAmountCents' | 'fiatCurrency'>>
