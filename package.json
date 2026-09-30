@@ -1,0 +1,39 @@
+{
+  "name": "helicopter-humans",
+  "version": "1.0.0",
+  "description": "A privacy layer for your agent. Don't be a helicopter human.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/water-bear86/helicopter-humans.git"
+  },
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/water-bear86/helicopter-humans/issues"
+  },
+  "homepage": "https://github.com/water-bear86/helicopter-humans#readme",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.3",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}
