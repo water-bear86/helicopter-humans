@@ -13,7 +13,10 @@
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
     "test:packages": "npm test --workspaces --if-present",
     "test:pg": "vitest run src/checkout/store-postgres.test.ts",
-    "smoke:functions": "node scripts/smoke-functions.mjs"
+    "smoke:functions": "node scripts/smoke-functions.mjs",
+    "tools:build": "vite build --config vite.tools.config.ts --logLevel warn",
+    "relay": "npm run tools:build && node .tools-build/relay.js",
+    "sandbox": "npm run tools:build && node --env-file-if-exists=.env.sandbox .tools-build/sandbox-preflight.js"
   },
   "repository": {
     "type": "git",

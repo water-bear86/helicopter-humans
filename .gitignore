@@ -6,3 +6,6 @@ playwright-report
 test-results
 screenshots
 .vercel
+.tools-build
+.relay-local
+.sandbox-local

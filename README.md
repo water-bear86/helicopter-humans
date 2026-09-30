@@ -13,7 +13,9 @@ A privacy layer for your agent. Don't be a helicopter human. Let your agent have
 | `GET/POST /api/checkout/orders`, `GET/POST /api/checkout/order` | Fail closed: HTTP 503 `checkout_disabled` on every deployment while any checkout blocker remains in code | `api/checkout/` |
 | Shielded ZEC payment check | Prototype, collection off. Verify-only package tested offline; no route issues a quote, address or payment challenge | `packages/payment-adapter/`, `src/payments/` |
 | `POST /api/pay/quote`, `POST /api/pay/settle` | Fail closed: always HTTP 503 `payments_disabled` until every live-readiness blocker is cleared in code | `api/pay/` |
-| `GET /api/status` | Service shell health check: active payment adapter and the checkout, whether each is collecting, and their blockers | `api/status.ts` |
+| Agent relay | Local prototype only: loopback, one local token, fixed Hacker News routes. Not deployed; `/api/status` reports `relay.mode: "unavailable"` | `src/relay/`, `docs/RELAY.md`, `examples/relay/` |
+| CipherPay testnet check | Operator-run preflight and harness, testnet only. No mainnet invoice possible; not payment evidence for launch | `src/sandbox/`, `db/sandbox/`, `docs/SANDBOX_TEST.md` |
+| `GET /api/status` | Service shell health check: active payment adapter, checkout and relay, whether each is collecting or available, and their blockers | `api/status.ts` |
 
 The site loads no analytics, third-party scripts or web fonts. Keep it that way; an e2e test enforces it.
 
@@ -31,6 +33,8 @@ npm run test:e2e   # Playwright, desktop + mobile, site build and checkout fixtu
 npm run test:pg    # checkout service contract against real PostgreSQL; needs CHECKOUT_PG_TEST_URL (see docs/CHECKOUT.md)
 CHECKOUT_MODE=fixture npm run dev   # checkout preview at /checkout.html with a simulated provider
 npm run build      # production build to dist/
+npm run relay      # local prototype agent relay on http://127.0.0.1:8749 (see docs/RELAY.md)
+npm run sandbox -- preflight   # CipherPay testnet readiness, read-only (see docs/SANDBOX_TEST.md)
 ```
 
 ## Configuration
@@ -75,5 +79,7 @@ After deployment, exercise the redactor sample and empty-input error, terminal k
 Do not enable the Founding Pass merely by adding a link: price, payout account, deliverable and refund terms must be settled first. The payment adapter is separate work. Merchant setup, a working shielded payer, durable replay storage, verified binding between a payment and its buyer/request, and an authorized end-to-end check are still required for live collection. No seed, spend key, or viewing key belongs in this repository.
 
 ## Payment adapter and checkout
+
+`docs/RELAY.md` covers the local agent relay: privacy boundary, request/response and access contracts, SSRF controls, and the remaining step to usage credit. `docs/SANDBOX_TEST.md` is the operator runbook for the testnet check, the wallet evidence and the PostgreSQL deployment proposal.
 
 `docs/CHECKOUT.md` covers the CipherPay invoice checkout: order binding, states, the PostgreSQL store and migrations, secure configuration, readiness blockers and limitations. `docs/PAYMENT_ADAPTER.md` covers the earlier txid/x402 path, which stays disabled and is not the checkout.

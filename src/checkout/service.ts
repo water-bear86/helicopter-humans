@@ -13,7 +13,7 @@
 //   the provider detected it by that deadline; it may confirm later.
 // - Only `confirmed` with the full amount on the active invoice grants, inside the order lock, once.
 // - A replacement quote is created only after every earlier invoice was read and shows nothing paid.
-import { shieldedAddressKind, maskAddress } from './address.js'
+import { shieldedAddressKind, maskAddress, type ZcashNetwork } from './address.js'
 import type { CreatedInvoice, InvoiceProvider, ProviderInvoice, ReadOutcome } from './cipherpay.js'
 import { hashRecoveryCode, isRecoveryCode, newId, newRecoveryCode } from './credential.js'
 import { providerAmount, type Offer } from './offer.js'
@@ -71,6 +71,8 @@ export interface CheckoutServiceOptions {
   // How long one request may hold the invoice-creation claim. Must exceed the provider timeout.
   claimTtlMs?: number
   maxQuotesPerOrder?: number
+  // Refund addresses must belong to the provider's network. Mainnet unless a testnet sandbox run.
+  network?: ZcashNetwork
 }
 
 // States that a provider read never moves an order out of (only into something more severe). An
@@ -616,7 +618,7 @@ export function createCheckoutService(options: CheckoutServiceOptions) {
     // Records where the buyer wants ZEC returned. The refund itself is manual, from the operator's
     // wallet; no key ever reaches this app.
     async requestRefund(code: string, refundAddress: unknown): Promise<OrderView> {
-      if (typeof refundAddress !== 'string' || !shieldedAddressKind(refundAddress.trim())) throw new CheckoutError('invalid_refund_address', 400)
+      if (typeof refundAddress !== 'string' || !shieldedAddressKind(refundAddress.trim(), options.network ?? 'mainnet')) throw new CheckoutError('invalid_refund_address', 400)
       const address = refundAddress.trim()
       const s = await load(code)
       const result = await store.update(s.order.id, (cur) => {

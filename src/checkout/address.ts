@@ -42,18 +42,28 @@ function checksumOf(value: string, hrp: string): number | undefined {
 
 export type ShieldedKind = 'unified' | 'sapling'
 
-// Mainnet only. Transparent `t1`/`t3` addresses and testnet prefixes are rejected.
-export function shieldedAddressKind(value: string): ShieldedKind | undefined {
+// Each network has its own prefixes (ZIP 316, ZIP 32), so an address can only ever match one of them.
+export type ZcashNetwork = 'mainnet' | 'testnet'
+export const ADDRESS_HRP = Object.freeze({
+  mainnet: { unified: 'u', sapling: 'zs', saplingLength: 78 },
+  testnet: { unified: 'utest', sapling: 'ztestsapling', saplingLength: 88 },
+})
+
+// Transparent addresses and the other network's prefixes are rejected.
+export function shieldedAddressKind(value: string, network: ZcashNetwork = 'mainnet'): ShieldedKind | undefined {
   if (typeof value !== 'string' || value.length > 1024) return undefined
-  if (value.startsWith('u1') && value.length >= 100 && checksumOf(value, 'u') === BECH32M) return 'unified'
-  if (value.startsWith('zs1') && value.length === 78 && checksumOf(value, 'zs') === BECH32) return 'sapling'
+  const hrp = ADDRESS_HRP[network]
+  if (value.startsWith(`${hrp.unified}1`) && value.length >= 100 && checksumOf(value, hrp.unified) === BECH32M) return 'unified'
+  if (value.startsWith(`${hrp.sapling}1`) && value.length === hrp.saplingLength && checksumOf(value, hrp.sapling) === BECH32) return 'sapling'
   return undefined
 }
 
 // Shape of a provider-issued invoice address. Charset and length only: the provider owns the checksum,
 // and fixture addresses deliberately fail it so that no wallet can pay them.
-export function looksLikeUnifiedAddress(value: unknown): value is string {
-  return typeof value === 'string' && /^u1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{60,1000}$/.test(value)
+export function looksLikeUnifiedAddress(value: unknown, network: ZcashNetwork = 'mainnet'): value is string {
+  if (typeof value !== 'string') return false
+  const prefix = `${ADDRESS_HRP[network].unified}1`
+  return value.startsWith(prefix) && /^[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{60,1000}$/.test(value.slice(prefix.length))
 }
 
 // For tests and the fixture provider: a correctly checksummed Bech32m string over `data` (5-bit values).

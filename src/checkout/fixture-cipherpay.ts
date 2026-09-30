@@ -6,7 +6,7 @@
 // Addresses are Bech32m strings with a deliberately broken checksum: no wallet will pay them.
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes, randomUUID } from 'node:crypto'
-import { encodeBech32m } from './address.js'
+import { ADDRESS_HRP, encodeBech32m, type ZcashNetwork } from './address.js'
 
 export const FIXTURE_ORIGIN = 'http://127.0.0.1:9'
 export const FIXTURE_API_KEY = 'cpay_sk_fixture_not_a_real_key'
@@ -48,10 +48,10 @@ export interface FixtureInvoice {
 
 const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l'
 
-// A u1 string that looks right but fails its Bech32m checksum.
-export function unpayableAddress(): string {
+// A u1 (or utest1) string that looks right but fails its Bech32m checksum.
+export function unpayableAddress(network: ZcashNetwork = 'mainnet'): string {
   const data = [...randomBytes(120)].map((b) => b & 31)
-  const valid = encodeBech32m('u', data)
+  const valid = encodeBech32m(ADDRESS_HRP[network].unified, data)
   const last = valid.at(-1) as string
   const swapped = CHARSET[(CHARSET.indexOf(last) + 1) % 32]
   return valid.slice(0, -1) + swapped
@@ -81,6 +81,7 @@ export interface FixtureCipherPayOptions {
   now?: () => number
   expiryMinutes?: number
   zecUsd?: number
+  network?: ZcashNetwork
 }
 
 export function createFixtureCipherPay(options: FixtureCipherPayOptions = {}) {
@@ -98,10 +99,10 @@ export function createFixtureCipherPay(options: FixtureCipherPayOptions = {}) {
     const id = randomUUID()
     const memo = `CP-${randomBytes(4).toString('hex').toUpperCase()}`
     const priceZec = amount / rate
-    const address = unpayableAddress()
+    const address = unpayableAddress(options.network)
     const zatoshis = Math.round(priceZec * 1e8)
     const uri = withFee
-      ? `zcash:?address=${address}&amount=${priceZec.toFixed(8)}&memo=${b64(memo)}&address.1=${unpayableAddress()}&amount.1=${(priceZec * 0.01).toFixed(8)}&memo.1=${b64(`FEE-${id}`)}`
+      ? `zcash:?address=${address}&amount=${priceZec.toFixed(8)}&memo=${b64(memo)}&address.1=${unpayableAddress(options.network)}&amount.1=${(priceZec * 0.01).toFixed(8)}&memo.1=${b64(`FEE-${id}`)}`
       : `zcash:${address}?amount=${priceZec.toFixed(8)}&memo=${b64(memo)}`
     const invoice: FixtureInvoice = {
       id,
