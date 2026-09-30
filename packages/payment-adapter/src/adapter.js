@@ -12,7 +12,7 @@
  */
 
 import { parseZatoshis, formatZec } from './amounts.js'
-import { ASSET, resolveConfig, SCHEME, SUPPORTED_NETWORK } from './config.js'
+import { ASSET, resolveConfig, SCHEME, SUPPORTED_NETWORK, X402_VERSION } from './config.js'
 import {
   createPaymentChallenge,
   DEFAULT_MAX_TIMEOUT_SECONDS,
@@ -26,6 +26,7 @@ import { AdapterConfigurationError, UnsafeLedgerError } from './errors.js'
 import { CipherPayFacilitator } from './facilitator.js'
 import { assertReceiptLedger, CLAIM, merchantScopeFromApiKey, RECORD_STATE } from './ledger.js'
 import { OPERATOR_FACING_REASONS, OUTCOME, REASON } from './outcomes.js'
+import { challengeClaims, createQuoteSigner, deriveQuoteSigningSecret } from './quote-signing.js'
 
 export const ADAPTER_ID = 'cipherpay-zcash-shielded'
 
@@ -82,7 +83,11 @@ const BUYER_MESSAGE = Object.freeze({
   [REASON.HEADER_TOO_LARGE]: 'The payment header was too large to read.',
   [REASON.UNSUPPORTED_X402_VERSION]: 'Only x402 version 2 is supported here.',
   [REASON.REQUIREMENTS_MISMATCH]: 'The payment terms you accepted are not the ones this quote offered.',
-  [REASON.QUOTE_EXPIRED]: 'This quote expired. Request the resource again for a new one.',
+  // Someone reading this may already have paid. Never tell them to start over
+  // in a way that reads as "pay again": the transaction is already on chain and
+  // the same txid settles the fresh quote.
+  [REASON.QUOTE_EXPIRED]:
+    'This quote expired. Request the resource again for a fresh quote, then re-send the same transaction id against it. Do not send a second payment.',
   [REASON.INVALID_TXID]: 'The transaction id was not 64 hexadecimal characters. Re-send it for the same transaction.',
   [REASON.TRANSACTION_NOT_VISIBLE]: 'Your transaction is not visible yet. Retry with the same payment header; do not send a second payment.',
   [REASON.INSUFFICIENT_FUNDS]: 'The amount received does not cover this quote.',
@@ -92,6 +97,10 @@ const BUYER_MESSAGE = Object.freeze({
   [REASON.MERCHANT_UNAUTHORIZED]: 'Payment verification is temporarily unavailable. Your payment was not assessed.',
   [REASON.MERCHANT_BILLING_BLOCKED]: 'Payment verification is temporarily unavailable. Your payment was not assessed.',
   [REASON.LEDGER_UNAVAILABLE]: 'Payment verification is temporarily unavailable. Your payment was not assessed.',
+  [REASON.LEDGER_CONTRACT_VIOLATION]: 'Payment verification is temporarily unavailable. Your payment was not assessed.',
+  [REASON.QUOTE_NOT_ISSUED]:
+    'This quote was not issued by this server, or it has been altered. Request the resource again for a fresh quote, then re-send the same transaction id. Do not send a second payment.',
+  [REASON.CHALLENGE_CONFIG_DRIFT]: 'Payment verification is temporarily unavailable. Your payment was not assessed.',
   [REASON.FACILITATOR_UNAVAILABLE]: 'Could not reach payment verification. Retry with the same payment header.',
   [REASON.FACILITATOR_TIMEOUT]: 'Payment verification timed out. Retry with the same payment header.',
   [REASON.FACILITATOR_BAD_RESPONSE]: 'Payment verification is temporarily unavailable. Your payment was not assessed.',
@@ -134,6 +143,7 @@ export function createPaymentAdapter(options = {}) {
     limits = {},
     resourceForProduct = defaultResourceForProduct,
     facilitatorOptions = {},
+    quoteSigningSecret,
   } = options
 
   const resolved =
@@ -195,14 +205,29 @@ export function createPaymentAdapter(options = {}) {
   }
 
   const merchantId = providedMerchantId ?? merchantScopeFromApiKey(config.apiKey)
+
+  // Quote ids carry a mac over their own terms, so `settle` can tell a quote we
+  // issued from one a caller assembled or edited. Derived from the API key
+  // unless given explicitly -- see `deriveQuoteSigningSecret` on rotation.
+  if (quoteSigningSecret === undefined && (typeof config.apiKey !== 'string' || config.apiKey === '')) {
+    throw new AdapterConfigurationError(
+      'cannot sign quotes: pass quoteSigningSecret, or supply a config with an apiKey to derive one from',
+    )
+  }
+  const signer = createQuoteSigner({
+    secret: quoteSigningSecret ?? deriveQuoteSigningSecret(config.apiKey),
+  })
+  const signQuoteId = (nonce, claims) => signer.issue(nonce, claims)
   const facilitator =
     providedFacilitator ??
     new CipherPayFacilitator({ config, fetch: fetchImpl, logger, ...facilitatorOptions })
 
-  function createChallenge({ resource, quoteId, ttlSeconds = quoteTtlSeconds } = {}) {
+  function createChallenge({ resource, productId = null, quoteId, ttlSeconds = quoteTtlSeconds } = {}) {
     return createPaymentChallenge({
       config,
       resource,
+      productId,
+      signQuoteId,
       quoteId,
       ttlSeconds,
       maxTimeoutSeconds,
@@ -220,7 +245,7 @@ export function createPaymentAdapter(options = {}) {
     if (typeof productId !== 'string' || productId === '') {
       throw new AdapterConfigurationError('productId must be a non-empty string')
     }
-    const challenge = createChallenge({ resource: resourceForProduct(productId) })
+    const challenge = createChallenge({ productId, resource: resourceForProduct(productId) })
     return {
       quoteId: challenge.quoteId,
       productId,
@@ -249,9 +274,35 @@ export function createPaymentAdapter(options = {}) {
     if (challenge === null || typeof challenge !== 'object' || challenge.requirements === undefined) {
       throw new AdapterConfigurationError('authorize requires a challenge created by this adapter')
     }
-    assertChallengeMatchesConfig(challenge, config)
+
+    // Both guards below run BEFORE ledger.claim, on purpose: a challenge we
+    // will not honour must not leave a reserved txid behind, and must produce
+    // an outcome a route can serve rather than an exception thrown from
+    // somewhere deeper (the facilitator used to throw on a foreign scheme
+    // after the claim was already taken).
+    const drift = challengeConfigDrift(challenge, config)
+    if (drift !== null) {
+      return outcome({
+        kind: OUTCOME.UPSTREAM_ERROR,
+        reason: REASON.CHALLENGE_CONFIG_DRIFT,
+        detail: drift,
+        challenge,
+        operatorActionRequired: true,
+      })
+    }
+    if (!signer.verify(challenge.quoteId, challengeClaims(challenge))) {
+      return outcome({
+        kind: OUTCOME.UPSTREAM_ERROR,
+        reason: REASON.QUOTE_NOT_ISSUED,
+        detail:
+          'challenge quote id does not carry this server\'s mac over its own terms: it was not issued here, it was edited, or the signing secret changed',
+        challenge,
+        operatorActionRequired: true,
+      })
+    }
 
     const claimRequestId = requestId ?? challenge.quoteId
+    const resourceUrl = challenge.resource.url
     const nowMs = now()
 
     const parsed = parsePaymentSignature(paymentSignatureHeader, limits)
@@ -295,6 +346,9 @@ export function createPaymentAdapter(options = {}) {
       txid,
       requestId: claimRequestId,
       amountZatoshis: challenge.requirements.amount,
+      // One txid buys one resource. Stored, not merely passed: an owned record
+      // for a different resource is a replay, not a retry.
+      resource: resourceUrl,
     }
 
     let claimed
@@ -317,7 +371,30 @@ export function createPaymentAdapter(options = {}) {
       return outcome({
         kind: OUTCOME.REJECTED,
         reason: REASON.TXID_ALREADY_CLAIMED,
-        detail: `txid already claimed by request ${claimed.record.requestId} for ${claimed.record.amountZatoshis} zatoshis`,
+        detail: `txid already claimed by request ${claimed.record.requestId} for ${claimed.record.amountZatoshis} zatoshis and resource ${claimed.record.resource}`,
+        challenge,
+        txid,
+      })
+    }
+
+    // Do not trust an injected ledger to have compared the resource. A ledger
+    // that drops the field would silently replay one payment across resources,
+    // so a record that does not carry ours back is refused here.
+    if (typeof claimed.record.resource !== 'string') {
+      return outcome({
+        kind: OUTCOME.UPSTREAM_ERROR,
+        reason: REASON.LEDGER_CONTRACT_VIOLATION,
+        detail: 'the receipt ledger did not store the claimed resource; no resource was granted',
+        challenge,
+        txid,
+        operatorActionRequired: true,
+      })
+    }
+    if (claimed.record.resource !== resourceUrl) {
+      return outcome({
+        kind: OUTCOME.REJECTED,
+        reason: REASON.TXID_ALREADY_CLAIMED,
+        detail: `txid already claimed for resource ${claimed.record.resource}, not ${resourceUrl}`,
         challenge,
         txid,
       })
@@ -418,7 +495,7 @@ export function createPaymentAdapter(options = {}) {
 
   /** Site-contract `settle`. Maps an authorize outcome onto `PaymentResult`. */
   async function settle(quoteObject, proof, signal) {
-    const rebuilt = challengeFromQuote(quoteObject, config, maxTimeoutSeconds, resourceForProduct)
+    const rebuilt = challengeFromQuote(quoteObject, config, maxTimeoutSeconds, resourceForProduct, signer)
     if (!rebuilt.ok) {
       return { status: 'failed', quoteId: quoteObject?.quoteId ?? 'unknown', reason: rebuilt.reason, retryable: false }
     }
@@ -491,23 +568,51 @@ function disabledOutcome(problems) {
 }
 
 /**
- * Refuse a challenge whose money fields drifted from current configuration --
- * a stale or tampered quote must not set the price or the destination.
+ * Refuse a challenge whose terms drifted from current configuration -- a stale
+ * or tampered quote must not set the price, the destination, the scheme or the
+ * asset. `scheme` and `asset` are pinned here and not only in the envelope
+ * comparison: the facilitator raises on an unknown scheme, and it does so after
+ * the txid has already been reserved.
+ *
+ * Returns an operator-facing description, or null when the challenge is fine.
+ *
+ * @returns {string|null}
  */
-function assertChallengeMatchesConfig(challenge, config) {
+function challengeConfigDrift(challenge, config) {
   const r = challenge.requirements
+  if (r.scheme !== SCHEME) {
+    return `challenge scheme ${JSON.stringify(r.scheme)} is not the only supported scheme ${SCHEME}`
+  }
+  if (r.asset !== ASSET) {
+    return `challenge asset ${JSON.stringify(r.asset)} is not the only supported asset ${ASSET}`
+  }
   if (r.payTo !== config.payTo) {
-    throw new AdapterConfigurationError('challenge payTo does not match the configured destination')
+    return 'challenge payTo does not match the configured destination'
   }
   if (r.network !== config.network) {
-    throw new AdapterConfigurationError('challenge network does not match the configured network')
+    return 'challenge network does not match the configured network'
   }
   if (r.amount !== config.priceZatoshis.toString()) {
-    throw new AdapterConfigurationError('challenge amount does not match the configured price')
+    return 'challenge amount does not match the configured price'
   }
+  return null
 }
 
-function challengeFromQuote(quoteObject, config, maxTimeoutSeconds, resourceForProduct) {
+/**
+ * Rebuild the challenge for a quote the caller handed back to `settle`.
+ *
+ * Comparing the money fields against configuration is NOT enough on its own:
+ * every quote this server issues carries the same amount, destination and
+ * network, so a quote we never issued -- or one of ours with `expiresAt` moved
+ * into 2099, or `productId` swapped for a dearer one -- passes that check
+ * unchanged. The quote id's mac is what settles it: it covers the product, the
+ * resource, the scheme, the asset, the amount, the destination, the timeout and
+ * the expiry, so exactly the quotes we issued verify.
+ *
+ * Failures here are non-retryable by design. A caller cannot fix a quote we
+ * never issued by sending it again.
+ */
+function challengeFromQuote(quoteObject, config, maxTimeoutSeconds, resourceForProduct, signer) {
   if (quoteObject === null || typeof quoteObject !== 'object') {
     return { ok: false, reason: 'a quote is required' }
   }
@@ -516,6 +621,7 @@ function challengeFromQuote(quoteObject, config, maxTimeoutSeconds, resourceForP
   if (
     quoteObject.payTo !== config.payTo ||
     quoteObject.network !== config.network ||
+    quoteObject.asset !== ASSET ||
     amount.value !== config.priceZatoshis
   ) {
     return { ok: false, reason: 'this quote does not match current server configuration' }
@@ -523,34 +629,46 @@ function challengeFromQuote(quoteObject, config, maxTimeoutSeconds, resourceForP
   if (typeof quoteObject.quoteId !== 'string' || quoteObject.quoteId === '') {
     return { ok: false, reason: 'quote is missing a quoteId' }
   }
+  if (typeof quoteObject.productId !== 'string' || quoteObject.productId === '') {
+    return { ok: false, reason: 'quote is missing a productId' }
+  }
   if (typeof quoteObject.expiresAt !== 'string' || Number.isNaN(Date.parse(quoteObject.expiresAt))) {
     return { ok: false, reason: 'quote is missing a usable expiresAt' }
   }
 
-  const resource = resourceForProduct(quoteObject.productId ?? 'unknown')
-  return {
-    ok: true,
-    challenge: Object.freeze({
-      quoteId: quoteObject.quoteId,
-      x402Version: 2,
-      resource: Object.freeze({
-        url: resource.url,
-        description: resource.description ?? '',
-        mimeType: resource.mimeType ?? 'application/json',
-      }),
-      requirements: Object.freeze({
-        scheme: SCHEME,
-        network: config.network,
-        asset: ASSET,
-        amount: config.priceZatoshis.toString(),
-        payTo: config.payTo,
-        maxTimeoutSeconds,
-        extra: Object.freeze({}),
-      }),
-      createdAt: quoteObject.createdAt ?? quoteObject.expiresAt,
-      expiresAt: quoteObject.expiresAt,
+  const resource = resourceForProduct(quoteObject.productId)
+  const challenge = Object.freeze({
+    quoteId: quoteObject.quoteId,
+    productId: quoteObject.productId,
+    x402Version: X402_VERSION,
+    resource: Object.freeze({
+      url: resource.url,
+      description: resource.description ?? '',
+      mimeType: resource.mimeType ?? 'application/json',
     }),
+    requirements: Object.freeze({
+      scheme: SCHEME,
+      network: config.network,
+      asset: ASSET,
+      amount: config.priceZatoshis.toString(),
+      payTo: config.payTo,
+      maxTimeoutSeconds,
+      extra: Object.freeze({}),
+    }),
+    // Not signed: the site's `Quote` shape does not carry it, so `settle` could
+    // not reproduce it. Nothing is decided on it -- expiry reads `expiresAt`.
+    createdAt: quoteObject.createdAt ?? quoteObject.expiresAt,
+    expiresAt: quoteObject.expiresAt,
+  })
+
+  if (!signer.verify(challenge.quoteId, challengeClaims(challenge))) {
+    return {
+      ok: false,
+      reason: BUYER_MESSAGE[REASON.QUOTE_NOT_ISSUED],
+    }
   }
+
+  return { ok: true, challenge }
 }
 
 /** Accept either a bare 64-hex txid or a full `PAYMENT-SIGNATURE` value. */

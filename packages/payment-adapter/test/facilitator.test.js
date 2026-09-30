@@ -1,12 +1,15 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { createPaymentChallenge } from '../src/challenge.js'
+import { createPaymentChallenge as issueChallenge } from '../src/challenge.js'
 import { resolveConfig } from '../src/config.js'
 import { buildVerifyRequestBody, CipherPayFacilitator } from '../src/facilitator.js'
 import { OUTCOME, REASON } from '../src/outcomes.js'
-import { FIXTURE_API_KEY, FIXTURE_TXID, fixtureEnv, noSleep, scriptedFetch } from './helpers/fixtures.js'
+import { FIXTURE_API_KEY, FIXTURE_TXID, fixtureEnv, noSleep, scriptedFetch, fixtureSignQuoteId } from './helpers/fixtures.js'
 
 const { config } = resolveConfig(fixtureEnv())
+
+// Every challenge here is signed: `authorize` refuses an unsigned quote id.
+const createPaymentChallenge = (args) => issueChallenge({ signQuoteId: fixtureSignQuoteId, ...args })
 const challenge = createPaymentChallenge({
   config,
   resource: { url: 'https://example.test/api/v1/privacy-check' },

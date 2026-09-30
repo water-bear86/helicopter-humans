@@ -32,6 +32,20 @@ export const REASON = Object.freeze({
   MERCHANT_UNAUTHORIZED: 'merchant_unauthorized',
   /** Operator-facing only: our CipherPay bill, not the buyer's payment. */
   MERCHANT_BILLING_BLOCKED: 'merchant_billing_blocked',
+  /**
+   * Operator-facing only: the challenge handed to `authorize` does not carry
+   * our mac over its own terms, so this server did not issue it -- or the
+   * signing secret changed under it.
+   */
+  QUOTE_NOT_ISSUED: 'quote_not_issued',
+  /**
+   * Operator-facing only: a challenge's scheme, asset, amount, destination or
+   * network drifted from current configuration. Our bug or our config, never
+   * the buyer's payment.
+   */
+  CHALLENGE_CONFIG_DRIFT: 'challenge_config_drift',
+  /** Operator-facing only: the injected ledger broke its contract. */
+  LEDGER_CONTRACT_VIOLATION: 'ledger_contract_violation',
   FACILITATOR_UNAVAILABLE: 'facilitator_unavailable',
   FACILITATOR_BAD_RESPONSE: 'facilitator_bad_response',
   FACILITATOR_TIMEOUT: 'facilitator_timeout',
@@ -45,5 +59,12 @@ export const REASON = Object.freeze({
  * tell a buyer their payment was rejected because our merchant bill is unpaid.
  */
 export const OPERATOR_FACING_REASONS = Object.freeze(
-  new Set([REASON.MERCHANT_UNAUTHORIZED, REASON.MERCHANT_BILLING_BLOCKED, REASON.LEDGER_UNAVAILABLE]),
+  new Set([
+    REASON.MERCHANT_UNAUTHORIZED,
+    REASON.MERCHANT_BILLING_BLOCKED,
+    REASON.LEDGER_UNAVAILABLE,
+    REASON.LEDGER_CONTRACT_VIOLATION,
+    REASON.QUOTE_NOT_ISSUED,
+    REASON.CHALLENGE_CONFIG_DRIFT,
+  ]),
 )

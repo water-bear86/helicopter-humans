@@ -9,13 +9,14 @@ import {
   receiptKey,
   RECORD_STATE,
 } from '../src/ledger.js'
-import { FIXTURE_API_KEY, FIXTURE_TXID } from './helpers/fixtures.js'
+import { FIXTURE_API_KEY, FIXTURE_RESOURCE, FIXTURE_TXID } from './helpers/fixtures.js'
 
 const base = {
   network: 'zcash:mainnet',
   merchantId: 'merchant-fixture',
   txid: FIXTURE_TXID,
   amountZatoshis: '100000',
+  resource: FIXTURE_RESOURCE.url,
 }
 
 describe('receiptKey', () => {
@@ -83,6 +84,28 @@ describe('InMemoryReceiptLedger', () => {
     await ledger.claim({ ...base, requestId: 'req-1', amountZatoshis: '100000' })
     const upsell = await ledger.claim({ ...base, requestId: 'req-1', amountZatoshis: '50000000' })
     assert.equal(upsell.status, CLAIM.TAKEN)
+  })
+
+  it('refuses the same request pointed at a different resource', async () => {
+    const ledger = new InMemoryReceiptLedger()
+    await ledger.claim({ ...base, requestId: 'req-1' })
+    const elsewhere = await ledger.claim({
+      ...base,
+      requestId: 'req-1',
+      resource: 'https://example.test/api/v1/founding-pass',
+    })
+    assert.equal(elsewhere.status, CLAIM.TAKEN)
+    assert.equal(elsewhere.record.resource, FIXTURE_RESOURCE.url)
+  })
+
+  it('stores the resource on the record, and refuses a claim without one', async () => {
+    const ledger = new InMemoryReceiptLedger()
+    const { record } = await ledger.claim({ ...base, requestId: 'req-1' })
+    assert.equal(record.resource, FIXTURE_RESOURCE.url)
+    await assert.rejects(
+      ledger.claim({ ...base, txid: 'c'.repeat(64), requestId: 'req-2', resource: undefined }),
+      LedgerContractError,
+    )
   })
 
   it('serialises concurrent claimants so exactly one acquires', async () => {

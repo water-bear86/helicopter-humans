@@ -6,6 +6,9 @@
  * not a credential, and no test in this package touches the network.
  */
 
+import { createPaymentChallenge } from '../../src/challenge.js'
+import { createQuoteSigner } from '../../src/quote-signing.js'
+
 /** Shaped like a unified address so config validation accepts it. Not real. */
 export const FIXTURE_PAYTO_UA =
   'u1fixturefixturefixturefixturefixturefixturefixturefixturefixture00'
@@ -79,3 +82,40 @@ export function stubFacilitator(outcomes) {
 }
 
 export const noSleep = async () => {}
+
+/** Deterministic quote-signing secret for offline tests. Not a credential. */
+export const FIXTURE_QUOTE_SECRET = 'fixture-quote-signing-secret'
+
+/** A signer every test can share, so a challenge built here verifies there. */
+export const fixtureSigner = createQuoteSigner({ secret: FIXTURE_QUOTE_SECRET })
+
+/** `signQuoteId` for `createPaymentChallenge` in tests. */
+export const fixtureSignQuoteId = (nonce, claims) => fixtureSigner.issue(nonce, claims)
+
+/** A signed challenge, for tests that do not need the adapter around it. */
+export function fixtureChallenge(config, overrides = {}) {
+  return createPaymentChallenge({
+    config,
+    resource: FIXTURE_RESOURCE,
+    signQuoteId: fixtureSignQuoteId,
+    ...overrides,
+  })
+}
+
+export const FIXTURE_RESOURCE = Object.freeze({
+  url: 'https://example.test/api/v1/privacy-check',
+  description: 'One shielded privacy check',
+})
+
+/** A complete `claim` argument. Every field the ledger contract requires. */
+export function fixtureClaim(overrides = {}) {
+  return {
+    network: 'zcash:mainnet',
+    merchantId: 'merchant-fixture',
+    txid: FIXTURE_TXID,
+    requestId: 'request-1',
+    amountZatoshis: FIXTURE_PRICE_ZATOSHIS,
+    resource: FIXTURE_RESOURCE.url,
+    ...overrides,
+  }
+}

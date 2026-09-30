@@ -55,6 +55,12 @@ export {
 export { OPERATOR_FACING_REASONS, OUTCOME, REASON } from './src/outcomes.js'
 
 export {
+  challengeClaims,
+  createQuoteSigner,
+  deriveQuoteSigningSecret,
+} from './src/quote-signing.js'
+
+export {
   formatZec,
   MAX_ZATOSHIS,
   parseZatoshis,

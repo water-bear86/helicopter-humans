@@ -28,9 +28,12 @@ export const RECORD_STATE = Object.freeze({
 export const CLAIM = Object.freeze({
   /** First claimant. Proceed to verify. */
   ACQUIRED: 'acquired',
-  /** Same request, same price. Reuse the stored outcome if it is terminal. */
+  /** Same request, same price, same resource. Reuse a terminal stored outcome. */
   OWNED: 'owned',
-  /** Someone else's payment, or a different price tier. Grant nothing. */
+  /**
+   * Someone else's payment, a different price tier, or the same request now
+   * asking for a different resource. Grant nothing.
+   */
   TAKEN: 'taken',
 })
 
@@ -51,6 +54,10 @@ export function merchantScopeFromApiKey(apiKey) {
 
 /**
  * Canonical ledger key. Lower-cased txid: see `parsePaymentSignature`.
+ *
+ * The resource is deliberately NOT part of the key: one txid must grant exactly
+ * one resource, so a second resource has to collide with the first record and
+ * lose, not open a second row.
  *
  * @param {{ network: string, merchantId: string, txid: string }} args
  * @returns {string}
@@ -112,10 +119,17 @@ export class InMemoryReceiptLedger {
   /**
    * Reserve a txid for one request, atomically.
    *
+   * `resource` is stored and compared, not just carried: one txid grants one
+   * request AND one resource. Without it, a request id reused across two
+   * resources replays a single payment into both.
+   *
    * @param {import('../types/index.js').ClaimRequest} claim
    * @returns {Promise<import('../types/index.js').ClaimResult>}
    */
-  async claim({ network, merchantId, txid, requestId, amountZatoshis }) {
+  async claim({ network, merchantId, txid, requestId, amountZatoshis, resource }) {
+    if (typeof resource !== 'string' || resource === '') {
+      throw new LedgerContractError('claim requires the resource this payment is buying')
+    }
     const key = receiptKey({ network, merchantId, txid })
     const existing = this.#records.get(key)
 
@@ -127,6 +141,7 @@ export class InMemoryReceiptLedger {
         txid: txid.toLowerCase(),
         requestId,
         amountZatoshis: String(amountZatoshis),
+        resource,
         state: RECORD_STATE.CLAIMED,
         outcome: undefined,
         createdAt: timestamp,
@@ -136,9 +151,14 @@ export class InMemoryReceiptLedger {
       return { status: CLAIM.ACQUIRED, record: { ...record } }
     }
 
-    // Same request AND same price tier is a retry. Anything else -- another
-    // request id, or the same request re-priced -- gets nothing.
-    if (existing.requestId === requestId && existing.amountZatoshis === String(amountZatoshis)) {
+    // Same request AND same price tier AND same resource is a retry. Anything
+    // else -- another request id, the same request re-priced, or the same
+    // request pointed at a different resource -- gets nothing.
+    if (
+      existing.requestId === requestId &&
+      existing.amountZatoshis === String(amountZatoshis) &&
+      existing.resource === resource
+    ) {
       return { status: CLAIM.OWNED, record: { ...existing } }
     }
 

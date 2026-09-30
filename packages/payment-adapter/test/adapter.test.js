@@ -161,22 +161,88 @@ describe('challenge issuance', () => {
     assert.equal(outcome.body.accepts[0].payTo, challenge.requirements.payTo)
   })
 
-  it('refuses a challenge whose money fields drifted from configuration', async () => {
-    const adapter = build()
+  it('refuses a challenge whose terms drifted from configuration, without reserving the txid', async () => {
+    const ledger = fakeDurableLedger()
+    const facilitator = stubFacilitator({ kind: OUTCOME.VERIFIED })
+    const adapter = build({ ledger, facilitator })
     const challenge = adapter.createChallenge({ resource: RESOURCE })
+
     for (const tampered of [
       { ...challenge.requirements, amount: '1' },
       { ...challenge.requirements, payTo: 'u1attacker' },
       { ...challenge.requirements, network: 'zcash:testnet' },
+      // Pinned here as well as in the envelope comparison: the facilitator
+      // raises on an unknown scheme, and it used to do so after the claim.
+      { ...challenge.requirements, scheme: 'bogus' },
+      { ...challenge.requirements, asset: 'BTC' },
     ]) {
-      await assert.rejects(
-        adapter.authorize({
-          challenge: { ...challenge, requirements: tampered },
-          paymentSignatureHeader: paymentSignature({ ...challenge, requirements: tampered }),
-        }),
-        AdapterConfigurationError,
-      )
+      const outcome = await adapter.authorize({
+        challenge: { ...challenge, requirements: tampered },
+        paymentSignatureHeader: paymentSignature({ ...challenge, requirements: tampered }),
+      })
+      assert.equal(outcome.kind, OUTCOME.UPSTREAM_ERROR)
+      assert.equal(outcome.reason, REASON.CHALLENGE_CONFIG_DRIFT)
+      assert.equal(outcome.operatorFacing, true)
+      assert.equal(outcome.operatorActionRequired, true)
+      assert.equal(outcome.httpStatus, 503)
     }
+
+    // An outcome, not an exception -- and nothing reserved, nothing verified.
+    assert.equal(ledger.size(), 0)
+    assert.equal(facilitator.calls.length, 0)
+  })
+
+  it('still rejects a challenge that is not an object at all', async () => {
+    const adapter = build()
+    await assert.rejects(adapter.authorize({ challenge: null }), AdapterConfigurationError)
+    await assert.rejects(adapter.authorize({ challenge: {} }), AdapterConfigurationError)
+  })
+})
+
+describe('only quotes this server issued are honoured', () => {
+  it('refuses a challenge whose quote id does not carry our mac', async () => {
+    const ledger = fakeDurableLedger()
+    const facilitator = stubFacilitator({ kind: OUTCOME.VERIFIED })
+    const adapter = build({ ledger, facilitator })
+    const challenge = adapter.createChallenge({ resource: RESOURCE })
+
+    for (const forged of [
+      { ...challenge, quoteId: 'not-issued-by-quote' },
+      { ...challenge, quoteId: `${challenge.quoteId}x` },
+      // Correctly signed, but for terms that are no longer these ones.
+      { ...challenge, expiresAt: '2099-01-01T00:00:00.000Z' },
+      { ...challenge, resource: { ...challenge.resource, url: 'https://example.test/other' } },
+      { ...challenge, productId: 'founding-pass' },
+    ]) {
+      const outcome = await adapter.authorize({
+        challenge: forged,
+        paymentSignatureHeader: paymentSignature(forged),
+      })
+      assert.equal(outcome.kind, OUTCOME.UPSTREAM_ERROR)
+      assert.equal(outcome.reason, REASON.QUOTE_NOT_ISSUED)
+      assert.equal(outcome.operatorFacing, true)
+    }
+
+    assert.equal(ledger.size(), 0)
+    assert.equal(facilitator.calls.length, 0)
+  })
+
+  it('accepts a different signing secret only for quotes signed with it', async () => {
+    const mine = build({ quoteSigningSecret: 'secret-a' })
+    const theirs = build({ quoteSigningSecret: 'secret-b' })
+    const challenge = theirs.createChallenge({ resource: RESOURCE })
+
+    const outcome = await mine.authorize({
+      challenge,
+      paymentSignatureHeader: paymentSignature(challenge),
+    })
+    assert.equal(outcome.reason, REASON.QUOTE_NOT_ISSUED)
+
+    const ours = await theirs.authorize({
+      challenge,
+      paymentSignatureHeader: paymentSignature(challenge),
+    })
+    assert.equal(ours.kind, OUTCOME.VERIFIED)
   })
 })
 
@@ -630,6 +696,158 @@ describe('site PaymentAdapter contract', () => {
   })
 })
 
+describe('settle only honours a quote this process issued', () => {
+  it('refuses a quote with a rewritten expiry', async () => {
+    const facilitator = stubFacilitator({ kind: OUTCOME.VERIFIED })
+    const adapter = build({ facilitator, now: () => 1_000_000 })
+    const quote = await adapter.quote({ productId: 'privacy-check' })
+
+    // Same txid, same money, expiry moved 70-odd years into the future. Before
+    // the mac this settled as `succeeded` and extended a dead quote.
+    const extended = { ...quote, expiresAt: '2099-01-01T00:00:00.000Z' }
+    const result = await adapter.settle(extended, FIXTURE_TXID)
+
+    assert.equal(result.status, 'failed')
+    assert.equal(result.retryable, false)
+    assert.match(result.reason, /not issued by this server, or it has been altered/)
+    assert.equal(facilitator.calls.length, 0)
+  })
+
+  it('refuses a second product on the same quote id', async () => {
+    const facilitator = stubFacilitator({ kind: OUTCOME.VERIFIED })
+    const adapter = build({ facilitator })
+    const quote = await adapter.quote({ productId: 'privacy-check' })
+    assert.equal((await adapter.settle(quote, FIXTURE_TXID)).status, 'succeeded')
+
+    const upsell = { ...quote, productId: 'founding-pass' }
+    const result = await adapter.settle(upsell, FIXTURE_TXID)
+
+    assert.equal(result.status, 'failed')
+    assert.equal(result.retryable, false)
+    assert.match(result.reason, /not issued by this server, or it has been altered/)
+    // Only the first, legitimate settle reached the facilitator.
+    assert.equal(facilitator.calls.length, 1)
+  })
+
+  it('refuses a quote object `quote()` never returned', async () => {
+    const facilitator = stubFacilitator({ kind: OUTCOME.VERIFIED })
+    const adapter = build({ facilitator })
+    const issued = await adapter.quote({ productId: 'privacy-check' })
+
+    // Every field matches configuration; only the quote id was invented.
+    const invented = { ...issued, quoteId: 'not-issued-by-quote' }
+    const result = await adapter.settle(invented, FIXTURE_TXID)
+
+    assert.equal(result.status, 'failed')
+    assert.equal(result.retryable, false)
+    assert.equal(facilitator.calls.length, 0)
+  })
+
+  it('refuses a quote whose asset was swapped', async () => {
+    const adapter = build()
+    const quote = await adapter.quote({ productId: 'privacy-check' })
+    const result = await adapter.settle({ ...quote, asset: 'BTC' }, FIXTURE_TXID)
+    assert.equal(result.status, 'failed')
+    assert.equal(result.retryable, false)
+    assert.match(result.reason, /does not match current server configuration/)
+  })
+
+  it('refuses a quote with no productId at all', async () => {
+    const adapter = build()
+    const quote = await adapter.quote({ productId: 'privacy-check' })
+    const { productId: _dropped, ...withoutProduct } = quote
+    assert.equal((await adapter.settle(withoutProduct, FIXTURE_TXID)).status, 'failed')
+  })
+})
+
+describe('one txid grants one resource', () => {
+  it('refuses an owned replay that points at a different resource', async () => {
+    const facilitator = stubFacilitator({ kind: OUTCOME.VERIFIED })
+    const adapter = build({ facilitator })
+    const other = { url: 'https://example.test/api/v1/founding-pass', description: 'Founding pass' }
+
+    const first = await adapter.createChallenge({ resource: RESOURCE })
+    const granted = await adapter.authorize({
+      challenge: first,
+      paymentSignatureHeader: paymentSignature(first),
+      requestId: 'shared-request',
+    })
+    assert.equal(granted.kind, OUTCOME.VERIFIED)
+    assert.equal(granted.replay, false)
+
+    // Same request id and same price, a different resource. Before the receipt
+    // stored the resource this came back `verified` with `replay: true`.
+    const second = await adapter.createChallenge({ resource: other })
+    const replayed = await adapter.authorize({
+      challenge: second,
+      paymentSignatureHeader: paymentSignature(second),
+      requestId: 'shared-request',
+    })
+
+    assert.equal(replayed.kind, OUTCOME.REJECTED)
+    assert.equal(replayed.reason, REASON.TXID_ALREADY_CLAIMED)
+    assert.equal(facilitator.calls.length, 1)
+  })
+
+  it('still returns the stored grant when the same request retries the same resource', async () => {
+    const facilitator = stubFacilitator({ kind: OUTCOME.VERIFIED })
+    const adapter = build({ facilitator })
+    const challenge = adapter.createChallenge({ resource: RESOURCE })
+    const args = { challenge, paymentSignatureHeader: paymentSignature(challenge), requestId: 'one-request' }
+
+    assert.equal((await adapter.authorize(args)).replay, false)
+    const retry = await adapter.authorize(args)
+    assert.equal(retry.kind, OUTCOME.VERIFIED)
+    assert.equal(retry.replay, true)
+    assert.equal(facilitator.calls.length, 1)
+  })
+
+  it('fails closed when the injected ledger drops the resource', async () => {
+    const facilitator = stubFacilitator({ kind: OUTCOME.VERIFIED })
+    const forgetful = {
+      durable: true,
+      async claim({ resource: _dropped, ...claim }) {
+        return { status: CLAIM.ACQUIRED, record: { ...claim, state: RECORD_STATE.CLAIMED } }
+      },
+      async settle(settlement) {
+        return { ...settlement, updatedAt: 'now' }
+      },
+      async get() {
+        return undefined
+      },
+    }
+    const adapter = build({ ledger: forgetful, facilitator })
+    const { outcome } = await authorizeWith(adapter)
+
+    assert.equal(outcome.kind, OUTCOME.UPSTREAM_ERROR)
+    assert.equal(outcome.reason, REASON.LEDGER_CONTRACT_VIOLATION)
+    assert.equal(outcome.operatorFacing, true)
+    assert.equal(facilitator.calls.length, 0)
+  })
+})
+
+describe('an expired quote never reads as "pay again"', () => {
+  it('tells a buyer who may already have paid to re-send the same txid', async () => {
+    const facilitator = stubFacilitator({ kind: OUTCOME.VERIFIED })
+    const adapter = build({ facilitator, now: () => 1_000_000 })
+    const challenge = adapter.createChallenge({ resource: RESOURCE, ttlSeconds: 1 })
+    const expired = build({ facilitator, now: () => 1_000_000 + 2_000 })
+
+    const outcome = await expired.authorize({
+      challenge,
+      paymentSignatureHeader: paymentSignature(challenge),
+    })
+
+    assert.equal(outcome.reason, REASON.QUOTE_EXPIRED)
+    assert.match(outcome.buyerMessage, /re-send the same transaction id/)
+    assert.match(outcome.buyerMessage, /Do not send a second payment/)
+    assert.doesNotMatch(outcome.buyerMessage, /for a new one\./)
+    // Expiry is caught before the claim, so the same txid is still free to
+    // settle the fresh quote the buyer is being sent to ask for.
+    assert.equal(facilitator.calls.length, 0)
+  })
+})
+
 describe('ledger claim shape', () => {
   it('claims by network, merchant, txid, request and price', async () => {
     const claims = []
@@ -656,6 +874,7 @@ describe('ledger claim shape', () => {
         txid: FIXTURE_TXID,
         requestId: 'req-42',
         amountZatoshis: '100000',
+        resource: RESOURCE.url,
       },
     ])
     assert.notEqual(challenge.quoteId, 'req-42')

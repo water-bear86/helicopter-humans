@@ -118,14 +118,63 @@ Two deliberate choices about not asking for money twice:
   payment that was already broadcast, so those are `rejected` with no new
   quote. A buyer who wants a new quote requests the resource with no header.
 
-`upstream_error` distinguishes our failures from the buyer's:
-`merchant_unauthorized` (our API key), `merchant_billing_blocked` (our
-CipherPay bill) and `ledger_unavailable` set `operatorFacing: true` and
-`operatorActionRequired: true`, and their `buyerMessage` says the payment was
-*not assessed*. Render `buyerMessage`, never `detail`.
+`upstream_error` distinguishes our failures from the buyer's. These reasons set
+`operatorFacing: true` and `operatorActionRequired: true`, and their
+`buyerMessage` says the payment was *not assessed*:
+
+| reason | what it means |
+|---|---|
+| `merchant_unauthorized` | Our API key. |
+| `merchant_billing_blocked` | Our CipherPay bill. |
+| `ledger_unavailable` | The receipt ledger did not answer. |
+| `ledger_contract_violation` | The injected ledger broke its contract (e.g. dropped `resource`). |
+| `quote_not_issued` | The challenge does not carry our mac over its own terms. |
+| `challenge_config_drift` | Its scheme, asset, amount, destination or network is not the configured one. |
+
+Render `buyerMessage`, never `detail`.
+
+An expired quote is `rejected` with `quote_expired`, and its `buyerMessage`
+tells the buyer to ask for a fresh quote and **re-send the same transaction
+id** — the payment may already be on chain, and expiry is caught before the
+ledger claim, so that same txid still settles the new quote. One residual edge:
+a payment that was already claimed and left `pending` when its quote expired
+will come back `txid_already_claimed` under a new quote id. That fails closed
+and needs an operator to resolve it by hand; it never grants twice.
 
 `PAYMENT-RESPONSE` decodes to `{success, txid, network}` — a verification
 confirmation, not a settlement receipt. Nothing moved because of our request.
+
+## Quote ids are signed
+
+`settle(quote, proof)` receives the quote back from the caller, and a
+serverless deployment has nowhere to remember the quotes it issued. Comparing
+the money fields against configuration is not enough on its own: **every** quote
+this server issues carries the same amount, destination and network, so a quote
+we never issued — or one of ours with `expiresAt` moved into 2099, or
+`productId` swapped for a dearer one — would pass that check unchanged.
+
+So the quote id *is* the signature. `quoteId` is `<nonce>.<mac>`, where the mac
+covers the product, the resource, the scheme, the network, the asset, the
+amount, the destination, `maxTimeoutSeconds` and `expiresAt`. Change any of them
+and the mac stops matching. `authorize` and `settle` both check it before the
+ledger is touched, so a quote we will not honour never reserves a txid.
+
+The site's `Quote` shape is unchanged — no new field for a consumer to drop.
+**Treat `quoteId` as opaque:** do not parse it, do not build one by hand, and do
+not regenerate a `Quote` field by field before handing it back to `settle`.
+
+`createdAt` is deliberately *not* signed: the site's `Quote` does not carry it,
+so `settle` could not reproduce it. Nothing is decided on it — expiry reads
+`expiresAt`.
+
+The signing secret comes from `quoteSigningSecret`, or is derived from
+`CIPHERPAY_API_KEY` when that is omitted. Derived means rotating the API key
+invalidates quotes still in flight; they fail closed, and the window is one
+quote TTL (300s). Set `quoteSigningSecret` explicitly to survive a rotation, and
+give every instance serving the route the same value.
+
+This is **not payer binding.** The mac proves *we* issued these terms. It says
+nothing about who paid — see "Payer binding: the blocking gap" below.
 
 ## Receipt ledger
 
@@ -137,7 +186,7 @@ v2 path. So one txid grants exactly one request, and **we** remember that.
 Inject a ledger implementing `ReceiptLedger`:
 
 ```
-claim({network, merchantId, txid, requestId, amountZatoshis})
+claim({network, merchantId, txid, requestId, amountZatoshis, resource})
   -> {status: 'acquired' | 'owned' | 'taken', record}
 settle({...claim, state: 'granted' | 'rejected', outcome}) -> record
 get({network, merchantId, txid}) -> record | undefined
@@ -145,10 +194,22 @@ durable: boolean
 ```
 
 - `acquired` — first claimant. Verify.
-- `owned` — same `requestId` **and** same `amountZatoshis`. A retry: return the
-  stored terminal result, or re-verify if still `claimed`.
-- `taken` — anything else: another request, or the same request re-priced.
-  Grant nothing.
+- `owned` — same `requestId` **and** same `amountZatoshis` **and** same
+  `resource`. A retry: return the stored terminal result, or re-verify if still
+  `claimed`.
+- `taken` — anything else: another request, the same request re-priced, or the
+  same request now asking for a different resource. Grant nothing.
+
+`resource` is **stored on the record and compared**, not merely passed through.
+One txid grants one request *and* one resource; without the comparison, a
+request id reused across two resources replays one payment into both. The
+record your `claim` returns must carry `resource` back — the adapter re-checks
+it and answers `ledger_contract_violation` (503, nothing granted) if it is
+missing, so a ledger that drops the column fails closed rather than quietly
+granting twice.
+
+The resource is deliberately **not** part of the primary key: a second resource
+has to collide with the first record and lose, not open a second row.
 
 `pending` and `upstream_error` leave the record `claimed`, so the owning
 request can retry the same txid and nobody else can take it meanwhile. If the
@@ -164,6 +225,7 @@ CREATE TABLE payment_receipt (
   txid            TEXT NOT NULL,
   request_id      TEXT NOT NULL,
   amount_zatoshis TEXT NOT NULL,
+  resource        TEXT NOT NULL,
   state           TEXT NOT NULL,
   outcome         JSONB,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -171,12 +233,12 @@ CREATE TABLE payment_receipt (
   PRIMARY KEY (network, merchant_id, txid)
 );
 
--- 'acquired' when this inserts a row; otherwise read the row back and
--- compare request_id and amount_zatoshis to decide 'owned' vs 'taken'.
-INSERT INTO payment_receipt (network, merchant_id, txid, request_id, amount_zatoshis, state)
-VALUES ($1, $2, lower($3), $4, $5, 'claimed')
+-- 'acquired' when this inserts a row; otherwise read the row back and compare
+-- request_id, amount_zatoshis AND resource to decide 'owned' vs 'taken'.
+INSERT INTO payment_receipt (network, merchant_id, txid, request_id, amount_zatoshis, resource, state)
+VALUES ($1, $2, lower($3), $4, $5, $6, 'claimed')
 ON CONFLICT (network, merchant_id, txid) DO NOTHING
-RETURNING request_id;
+RETURNING request_id, amount_zatoshis, resource;
 ```
 
 `InMemoryReceiptLedger` declares `durable: false`, and
@@ -225,8 +287,10 @@ endpoint has no challenge, memo or caller binding. Anyone who observes a txid
 can present it, and the receipt ledger stops *replay* but not *first-claim
 theft* — whoever presents a valid txid first gets the resource, payer or not.
 
-`requestId` and `quoteId` are locally generated correlation ids. They are
-**not** cryptographic payment ownership and must never be described as such.
+`requestId` is a locally generated correlation id. `quoteId` carries a mac over
+the *terms we quoted* (see "Quote ids are signed"), which proves those terms are
+ours and nothing more. Neither is cryptographic payment ownership, and neither
+must ever be described as such.
 
 `INTEGRATION_BLOCKERS` carries this and three other gaps as data, and
 `readyForLivePaidRoute` stays `false` until they are empty:
@@ -310,9 +374,11 @@ for (const [name, value] of Object.entries(outcome.headers)) response.setHeader(
 
 `quote()` and `settle()` are also provided, shaped to the site's
 `PaymentAdapter` contract in `src/payments/types.ts`. `settle` accepts either a
-bare 64-hex txid or a full `PAYMENT-SIGNATURE` value, and re-checks the quote's
-money fields against current configuration so a stale or tampered quote cannot
-set the price. `fee` is `"0"`: this adapter charges the payer nothing of its
+bare 64-hex txid or a full `PAYMENT-SIGNATURE` value. It re-checks the quote's
+money fields against current configuration **and** verifies the mac in its quote
+id, so it only ever honours a quote this server issued, with the product and
+expiry it issued. Hand the `Quote` object back as you received it — see "Quote
+ids are signed". `fee` is `"0"`: this adapter charges the payer nothing of its
 own. The payer separately pays a Zcash network fee we do not quote
 ([ZIP 317](https://zips.z.cash/zip-0317)), and CipherPay bills the merchant
 separately (source default `FEE_RATE=0.01`; the hosted schedule is
@@ -324,13 +390,21 @@ unconfirmed).
 cd packages/payment-adapter && npm test
 ```
 
-111 tests, no network, no dependencies. Covered: challenge schema and expiry;
+137 tests, no network, no dependencies. Covered: challenge schema and expiry;
 missing / malformed / oversized / wrong-version / bad-txid headers; changed
-requirements including a client-supplied lower price; expired quote; a valid
-fixture; pending detection; underpaid and rejected responses; 400 / 401 /
-merchant-billing / 5xx / unparseable-response handling; timeout and
-cancellation; concurrent and replayed txids; same-request retry; price-tier
-reuse; and the unsafe and unconfigured storage cases.
+requirements including a client-supplied lower price; expired quote and its
+buyer copy; a valid fixture; pending detection; underpaid and rejected
+responses; 400 / 401 / merchant-billing / 5xx / unparseable-response handling;
+timeout and cancellation; concurrent and replayed txids; same-request retry;
+price-tier reuse; and the unsafe and unconfigured storage cases.
+
+Specifically for the grant boundary: a quote with a rewritten `expiresAt`, a
+second `productId` on one quote id, a quote object `quote()` never returned, and
+a quote signed by another secret all fail closed without reaching the
+facilitator; a `scheme` or `asset` that drifted from configuration is an outcome
+rather than an exception and reserves no txid; an owned replay pointed at a
+different resource is `taken`, not `verified`; and a ledger that drops the
+`resource` column is refused.
 
 Every fixture is invented locally and labelled as such in
 `test/helpers/fixtures.js`. No mainnet transfer, no paid API account, no

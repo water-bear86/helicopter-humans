@@ -9,6 +9,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { ASSET, SCHEME, X402_VERSION } from './config.js'
+import { challengeClaims } from './quote-signing.js'
 
 /** Challenge lifetime, matching the CipherPay middleware default of 300s. */
 export const DEFAULT_QUOTE_TTL_SECONDS = 300
@@ -28,15 +29,21 @@ function assertResource(resource) {
 /**
  * Create an expiring, server-owned challenge for one resource.
  *
- * `quoteId` is a locally generated correlation id. It is NOT a cryptographic
- * commitment and it does NOT bind a payer to this challenge: the v2 verify
- * endpoint has no challenge, memo or caller binding, so possession of a txid
- * is all the facilitator ever checks. See README.md, "Payer binding".
+ * The returned `quoteId` is `<nonce>.<mac>`: `signQuoteId` seals every field
+ * this function put in the challenge, so `settle` can tell a quote we issued
+ * from one a caller assembled or edited. Treat it as opaque.
+ *
+ * The mac is NOT payer binding and does NOT bind a payer to this challenge:
+ * the v2 verify endpoint has no challenge, memo or caller binding, so
+ * possession of a txid is all the facilitator ever checks. See README.md,
+ * "Payer binding".
  *
  * @param {object} args
  * @param {import('../types/index.js').AdapterConfig} args.config
  * @param {{ url: string, description?: string, mimeType?: string }} args.resource
- * @param {string} [args.quoteId]
+ * @param {(nonce: string, claims: string) => string} args.signQuoteId
+ * @param {string|null} [args.productId] set when the challenge came from `quote()`
+ * @param {string} [args.quoteId] the nonce to use; a mac is appended to it
  * @param {number} [args.ttlSeconds]
  * @param {number} [args.maxTimeoutSeconds]
  * @param {() => number} [args.now]
@@ -45,12 +52,20 @@ function assertResource(resource) {
 export function createPaymentChallenge({
   config,
   resource,
+  signQuoteId,
+  productId = null,
   quoteId = randomUUID(),
   ttlSeconds = DEFAULT_QUOTE_TTL_SECONDS,
   maxTimeoutSeconds = DEFAULT_MAX_TIMEOUT_SECONDS,
   now = Date.now,
 }) {
   assertResource(resource)
+  if (typeof signQuoteId !== 'function') {
+    throw new TypeError('signQuoteId is required: an unsigned quote cannot be settled')
+  }
+  if (productId !== null && (typeof productId !== 'string' || productId === '')) {
+    throw new TypeError('productId must be a non-empty string or null')
+  }
   if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0) {
     throw new TypeError('ttlSeconds must be a positive integer')
   }
@@ -61,8 +76,9 @@ export function createPaymentChallenge({
   const createdAtMs = now()
   const expiresAtMs = createdAtMs + ttlSeconds * 1000
 
-  return Object.freeze({
+  const unsigned = {
     quoteId,
+    productId,
     x402Version: X402_VERSION,
     resource: Object.freeze({
       url: resource.url,
@@ -82,7 +98,10 @@ export function createPaymentChallenge({
     }),
     createdAt: new Date(createdAtMs).toISOString(),
     expiresAt: new Date(expiresAtMs).toISOString(),
-  })
+  }
+
+  // The mac covers the challenge as built above, so it must be computed last.
+  return Object.freeze({ ...unsigned, quoteId: signQuoteId(quoteId, challengeClaims(unsigned)) })
 }
 
 /**

@@ -36,7 +36,14 @@ export interface PaymentResource {
 }
 
 export interface PaymentChallenge {
+  /**
+   * `<nonce>.<mac>`. Opaque: the mac seals every server-owned field of this
+   * challenge, which is how `settle` tells a quote we issued from one a caller
+   * assembled or edited. Do not parse it, and do not build one by hand.
+   */
   readonly quoteId: string
+  /** Set when the challenge came from `quote()`; null for a direct resource. */
+  readonly productId: string | null
   readonly x402Version: 2
   readonly resource: PaymentResource
   readonly requirements: PaymentRequirements
@@ -100,6 +107,13 @@ export interface ReceiptRecord {
   readonly requestId: string
   /** Integer zatoshis as a decimal string. */
   readonly amountZatoshis: string
+  /**
+   * The resource this payment bought. One txid grants one resource: a durable
+   * ledger MUST store this and MUST return `taken` when a claim arrives for the
+   * same txid with a different resource. The adapter re-checks the value it
+   * gets back and fails closed if it is missing.
+   */
+  readonly resource: string
   readonly state: RecordState
   readonly outcome?: { reason: string | null; detail: string }
   readonly createdAt: string
@@ -112,6 +126,8 @@ export interface ClaimRequest {
   readonly txid: string
   readonly requestId: string
   readonly amountZatoshis: string
+  /** The resource URL this payment buys. Compared, not merely stored. */
+  readonly resource: string
 }
 
 export interface ClaimResult {
@@ -175,6 +191,8 @@ export interface PaymentAdapterInstance {
   readonly verifyUrl?: string
   createChallenge(args: {
     resource: { url: string; description?: string; mimeType?: string }
+    productId?: string | null
+    /** The nonce to use. A mac is appended to it; the result is the quote id. */
     quoteId?: string
     ttlSeconds?: number
   }): PaymentChallenge
@@ -205,5 +223,19 @@ export declare function createPaymentAdapter(options?: {
   maxTimeoutSeconds?: number
   limits?: { maxHeaderBytes?: number; maxEnvelopeBytes?: number }
   resourceForProduct?: (productId: string) => { url: string; description?: string; mimeType?: string }
+  /**
+   * Secret for the mac in every quote id. Derived from the API key when
+   * omitted, which means rotating the key invalidates quotes still in flight
+   * (they fail closed, within the quote TTL). Set this explicitly to survive a
+   * rotation, and share it across every instance serving the route.
+   */
+  quoteSigningSecret?: string | Buffer
   facilitatorOptions?: Record<string, unknown>
 }): PaymentAdapterInstance
+
+export declare function deriveQuoteSigningSecret(apiKey: string): Buffer
+export declare function challengeClaims(challenge: unknown): string
+export declare function createQuoteSigner(options: { secret: string | Buffer }): {
+  issue(nonce: string, claims: string): string
+  verify(quoteId: unknown, claims: string): boolean
+}
