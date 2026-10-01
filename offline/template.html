@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="__CSP__">
+  <title>Helicopter Humans — Offline log preparation</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#fdf6e3;color:#0a0a0a;font:16px system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:24px}h1{font-size:clamp(30px,6vw,58px);line-height:1;max-width:750px}h2{font-size:24px}p{line-height:1.5}.badge{font:700 14px monospace;background:#c6ff00;border:2px solid;padding:8px;display:inline-block}.panel{border:3px solid;box-shadow:6px 6px;background:white;padding:20px;margin:24px 0}label{display:block;font-weight:700;margin:16px 0 8px}textarea{width:100%;border:2px solid;font:14px/1.5 monospace;resize:vertical;padding:12px;background:#fffef8}input[type=file]{max-width:100%}.actions{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}button{font:700 16px system-ui;padding:12px 18px;border:3px solid;box-shadow:3px 3px;background:#c6ff00;cursor:pointer}button:disabled{background:#eee;box-shadow:none;cursor:default;color:#666}#clear{background:#ff69b4}#status{padding:12px;border:2px solid;background:#c6ff00;overflow-wrap:anywhere}input[type=checkbox]{width:20px;height:20px;vertical-align:middle}small{display:block;line-height:1.5}noscript p{border:3px solid;padding:12px}a{color:inherit}button:focus-visible,textarea:focus-visible,input:focus-visible{outline:4px solid #00ced1;outline-offset:3px}@media(max-width:600px){main{padding:16px}.panel{padding:12px;box-shadow:4px 4px}.actions button{flex:1}}
+  </style>
+</head>
+<body>
+<main>
+  <span class="badge">HH / OFFLINE / NO ACCOUNT</span>
+  <h1>Pack a smaller paper trail.</h1>
+  <p>Prepare a log excerpt for a bug report or teammate. This file replaces known patterns and the exact private phrases you specify, then lets you edit and review the result.</p>
+  <p>Open this saved file locally. It contains its own code and styles, makes no network requests and saves no session. It does not protect an agent's runtime, hide information from its owner, or erase an earlier disclosure. Names, private prose and unfamiliar secrets can survive the automatic pass.</p>
+  <noscript><p>JavaScript is required for this tool. No text will be processed while it is disabled.</p></noscript>
+  <section class="panel" aria-labelledby="source-title">
+    <h2 id="source-title">1. Pick only what you need to share</h2>
+    <label for="file">Open a local UTF-8 text file (up to 2 MiB)</label>
+    <input type="file" id="file" accept=".txt,.log,.json,.csv,.md,text/plain,application/json" disabled>
+    <label for="source">Or paste a short excerpt</label>
+    <textarea id="source" rows="9" spellcheck="false" autocomplete="off" autocapitalize="off" disabled></textarea>
+    <label for="terms">Also mask these exact names or phrases</label>
+    <textarea id="terms" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off" maxlength="16000" placeholder="One phrase per line. Case-sensitive." disabled></textarea>
+    <small>For example: a customer name, project name, hostname or private sentence. Matches are literal and case-sensitive; longer phrases take priority. Automatic patterns also cover common credentials, emails, addresses, cards, IPv4 and home-folder usernames.</small>
+    <div class="actions"><button id="prepare" type="button" disabled>Prepare preview</button><button id="clear" type="button" disabled>Clear all fields</button></div>
+  </section>
+  <p id="status" role="status" aria-live="polite">Add a short excerpt, then prepare a preview. Nothing is uploaded.</p>
+  <section class="panel" aria-labelledby="review-title">
+    <h2 id="review-title">2. Read the copy that will leave your machine</h2>
+    <label for="output">Editable preview</label>
+    <textarea id="output" rows="10" spellcheck="false" autocomplete="off" autocapitalize="off" disabled></textarea>
+    <label for="reviewed"><input type="checkbox" id="reviewed" disabled> I reviewed this entire preview and removed what I do not want to share.</label>
+    <div class="actions"><button id="save" type="button" disabled>Save reviewed excerpt</button><button id="copy" type="button" disabled>Copy reviewed excerpt</button></div>
+    <small>Zero matches means nothing was recognised, not that the text is safe. Changes require a new review. Export saves only the preview, never the original. Clear removes text from these fields, not from your clipboard, files or browser memory forensically. Use a trusted browser; extensions, device access and the downloaded code remain trust boundaries.</small>
+  </section>
+</main>
+<script>__SCRIPT__</script>
+</body>
+</html>
