@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
 
 test('the landing page leads to payment discovery and its guide', async ({ page }) => {
   await expect(page).toHaveTitle('Helicopter Humans | Find and clean up saved payment traces')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your agent paid. Its memory remembers.')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your agent paid. It left a trace.')
   await page.getByRole('link', { name: 'Skip to the good stuff' }).click()
   await page.getByRole('link', { name: 'Clean payment traces. Free' }).click()
   await expect(page).toHaveURL(/#memory-cleaner$/)
