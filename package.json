@@ -4,14 +4,22 @@
   "description": "A privacy layer for your agent. Don't be a helicopter human.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node scripts/build-offline.mjs && node scripts/build-memory-cleaner.mjs && node scripts/build-traces.mjs",
     "preview": "vite preview",
     "typecheck": "tsc",
     "lint": "eslint .",
     "test": "vitest run && npm run test:packages",
     "test:e2e": "playwright test",
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
-    "test:packages": "npm test --workspaces --if-present"
+    "test:packages": "npm test --workspaces --if-present",
+    "test:memory-cleaner": "python3 -m unittest discover -s tools/memory-cleaner/tests -p 'test_*.py' -v",
+    "test:traces": "node --test packages/traces/test/*.test.js",
+    "verify:traces-pack": "node scripts/verify-traces-pack.mjs",
+    "test:pg": "vitest run src/checkout/store-postgres.test.ts",
+    "smoke:functions": "node scripts/smoke-functions.mjs",
+    "tools:build": "vite build --config vite.tools.config.ts --logLevel warn",
+    "relay": "npm run tools:build && node .tools-build/relay.js",
+    "sandbox": "npm run tools:build && node --env-file-if-exists=.env.sandbox .tools-build/sandbox-preflight.js"
   },
   "repository": {
     "type": "git",
@@ -26,12 +34,14 @@
     "packages/*"
   ],
   "dependencies": {
-    "@helicopter-humans/payment-adapter": "0.1.0"
+    "@helicopter-humans/payment-adapter": "0.1.0",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.3",
+    "@types/pg": "^8.23.1",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
     "typescript": "^6.0.3",

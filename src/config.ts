@@ -1,18 +1,9 @@
 // Build-time public config. Variable names are documented in README.md and .env.example.
+// There is deliberately no checkout URL: a public build variable must never be able to open payment.
 function clean(value: string | undefined): string {
   return (value ?? '').trim()
 }
 
-function safeUrl(value: string): string {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' ? url.toString() : ''
-  } catch {
-    return ''
-  }
-}
-
 export const config = {
-  checkoutUrl: safeUrl(clean(import.meta.env.VITE_CHECKOUT_URL)),
   priceLabel: clean(import.meta.env.VITE_PRICE_LABEL),
 }
