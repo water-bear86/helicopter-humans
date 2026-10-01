@@ -1,13 +1,16 @@
+import { createZcashAdapter, ZCASH_ADAPTER_ID } from './adapters/zcash.js'
 import { disabledAdapter } from './disabled.js'
 import type { PaymentAdapter } from './types.js'
 
-// Register new adapters here. The payment adapter PR adds one entry and nothing else in this file.
-const ADAPTERS: Record<string, PaymentAdapter> = {
-  [disabledAdapter.id]: disabledAdapter,
+// Register new adapters here, one factory per id.
+const ADAPTERS: Record<string, () => PaymentAdapter> = {
+  [disabledAdapter.id]: () => disabledAdapter,
+  [ZCASH_ADAPTER_ID]: createZcashAdapter,
 }
 
 export function getAdapter(id: string | undefined): PaymentAdapter {
-  return (id && ADAPTERS[id]) || disabledAdapter
+  const factory = id && Object.hasOwn(ADAPTERS, id) ? ADAPTERS[id] : undefined
+  return factory ? factory() : disabledAdapter
 }
 
 export function adapterIds(): string[] {

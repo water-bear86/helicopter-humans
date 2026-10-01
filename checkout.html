@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Checkout preview | Helicopter Humans</title>
+    <meta name="description" content="Founding Agent Pass checkout preview. Closed: no payment can be taken on this site." />
+    <meta name="theme-color" content="#c6ff00" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="topbar">
+      <a class="logo" href="/" aria-label="Helicopter Humans home">
+        <span class="logo-mark" aria-hidden="true">HH</span>
+        <span>Helicopter<br />Humans</span>
+      </a>
+      <nav aria-label="Main">
+        <ul>
+          <li><a href="/#redactor">Free redactor</a></li>
+          <li><a href="/#pricing">Pricing</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main id="main" class="checkout">
+      <section class="section" aria-labelledby="co-title">
+        <div class="section-head">
+          <p class="stamp">Preview</p>
+          <h1 id="co-title">Founding Agent Pass checkout</h1>
+        </div>
+
+        <div id="co-mode" class="banner banner-off" role="note">
+          <strong>Checkout is closed.</strong> No payment can be taken on this site.
+        </div>
+        <div id="co-blockers-wrap" hidden>
+          <p class="fineprint">Still missing before any real order can be taken:</p>
+          <ul id="co-blockers" class="blockers"></ul>
+        </div>
+
+        <div id="co-app" class="checkout-grid" hidden>
+          <article class="card offer" aria-labelledby="offer-title">
+            <p class="stamp stamp-small">Draft terms</p>
+            <h2 id="offer-title">Offer</h2>
+            <p class="price" id="offer-price"></p>
+            <p id="offer-summary"></p>
+            <details>
+              <summary>Cancellation and refunds (draft)</summary>
+              <p id="offer-refunds"></p>
+            </details>
+            <p class="fineprint" id="offer-version"></p>
+          </article>
+
+          <div class="window" id="co-start">
+            <div class="titlebar"><span>order.exe <span class="tag tag-demo" id="co-start-tag">FIXTURE</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+            <div class="panel">
+              <button type="button" class="btn btn-primary" id="co-new">Start a private order</button>
+              <form id="co-recover" class="recover" autocomplete="off">
+                <label for="co-recover-code">Have a recovery code? Open your order</label>
+                <div class="inline">
+                  <input id="co-recover-code" name="recovery" type="password" spellcheck="false" autocapitalize="off" autocomplete="off" />
+                  <button type="submit" class="btn">Open order</button>
+                </div>
+              </form>
+              <p id="co-start-msg" class="summary" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+
+          <div class="window" id="co-order" hidden>
+            <div class="titlebar"><span>order-status.exe <span class="tag tag-demo">FIXTURE</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+            <div class="panel">
+              <div id="co-code-box" class="code-box" hidden>
+                <label for="co-code">Your private recovery code. Shown once. Save it now.</label>
+                <div class="inline">
+                  <input id="co-code" type="text" readonly spellcheck="false" />
+                  <button type="button" class="btn" id="co-code-copy">Copy code</button>
+                </div>
+                <p class="fineprint">It is the only way to manage this order or ask for a refund. We cannot recover it from a transaction ID or invoice number. It is kept in this tab's memory only; reloading the page forgets it.</p>
+                <label class="check"><input type="checkbox" id="co-code-saved" /> I have saved my recovery code</label>
+              </div>
+
+              <h2 id="co-status-title" tabindex="-1">Order status</h2>
+              <p id="co-state" class="state-pill"></p>
+              <p id="co-status" class="status" role="status" aria-live="polite"></p>
+              <p id="co-notice" class="notice" role="alert" hidden></p>
+
+              <div id="co-pay" hidden>
+                <dl class="pay">
+                  <dt>Amount</dt>
+                  <dd><strong id="co-amount"></strong> ZEC <span class="fineprint" id="co-zatoshis"></span></dd>
+                  <dt>Pay to</dt>
+                  <dd><code id="co-address" class="address"></code> <button type="button" class="btn btn-small" id="co-address-copy">Copy address</button></dd>
+                  <dt>Expires</dt>
+                  <dd id="co-expires"></dd>
+                  <dt>Reference</dt>
+                  <dd><code id="co-reference"></code> <span class="fineprint">(public, not a password)</span></dd>
+                </dl>
+                <p class="fee"><strong>Fees:</strong> one recipient, this exact amount, no surcharge. Your wallet adds its own network fee and shows it before you approve. Provider fees are ours.</p>
+                <a class="btn btn-primary" id="co-wallet" href="#">Open in wallet</a>
+              </div>
+
+              <div id="co-received" hidden>
+                <p>Received so far: <strong id="co-received-zec"></strong> ZEC <span class="fineprint" id="co-received-quote"></span></p>
+              </div>
+
+              <div id="co-receipt" class="receipt" hidden>
+                <p><strong>Preorder receipt <code id="co-receipt-id"></code></strong></p>
+                <p class="fineprint">A preorder entitlement for the Founding Agent Pass. It is not a working privacy service, and it does not prove who owns the wallet that paid.</p>
+              </div>
+
+              <div class="actions-row">
+                <button type="button" class="btn btn-primary" id="co-invoice" hidden>Get invoice</button>
+                <button type="button" class="btn" id="co-refresh" hidden>Refresh status</button>
+                <button type="button" class="btn" id="co-quote" hidden>Get a new quote</button>
+                <button type="button" class="btn" id="co-cancel" hidden>Cancel order</button>
+              </div>
+
+              <form id="co-refund" class="refund" autocomplete="off" hidden>
+                <label for="co-refund-address">Refund to a shielded Zcash address (u1… or zs1…)</label>
+                <div class="inline">
+                  <input id="co-refund-address" name="refund" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" />
+                  <button type="submit" class="btn">Request refund</button>
+                </div>
+                <p class="fineprint">Refunds are manual: we send back the ZEC we received for this order within the published window after checking the request. A transaction ID or invoice number alone cannot authorize a refund.</p>
+              </form>
+              <p id="co-refund-done" class="fineprint" hidden></p>
+
+              <fieldset id="co-fixture" class="fixture" hidden>
+                <legend>Fixture controls: simulate the provider</legend>
+                <p class="fineprint">These buttons act on a simulated provider. They exist only in local fixture mode.</p>
+                <div class="actions-row">
+                  <button type="button" class="btn btn-small" data-event="pay_full">Simulate full payment</button>
+                  <button type="button" class="btn btn-small" data-event="pay_partial">Simulate underpayment</button>
+                  <button type="button" class="btn btn-small" data-event="confirm">Simulate confirmation</button>
+                  <button type="button" class="btn btn-small" data-event="expire">Simulate expiry</button>
+                  <button type="button" class="btn btn-small" data-event="provider_refund">Simulate provider refund</button>
+                  <button type="button" class="btn btn-small" data-event="next_fee_recipient">Next quote adds a fee recipient</button>
+                  <button type="button" class="btn btn-small" data-event="next_timeout">Next quote times out</button>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+        </div>
+
+        <p class="fineprint">The free <a href="/#redactor">log redactor</a> is live and never talks to these checkout servers. The paid privacy relay does not exist yet and has no launch date.</p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p><strong>Helicopter Humans.</strong> Knock first.</p>
+    </footer>
+
+    <script type="module" src="/src/checkout-page.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "@helicopter-humans/payment-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verify-only CipherPay x402 v2 client for shielded Zcash payments. No custody, no settlement, no fund movement.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "src",
+    "types",
+    "README.md"
+  ],
+  "types": "./types/index.d.ts",
+  "scripts": {
+    "test": "node --test test/",
+    "check": "node --check index.js && node --test test/"
+  }
+}

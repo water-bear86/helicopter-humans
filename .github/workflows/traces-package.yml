@@ -1,0 +1,21 @@
+name: Guided trace package
+on:
+  push:
+    paths: ['packages/traces/**', 'scripts/verify-traces-pack.mjs', '.github/workflows/traces-package.yml']
+  pull_request:
+    paths: ['packages/traces/**', 'scripts/verify-traces-pack.mjs', '.github/workflows/traces-package.yml']
+jobs:
+  package:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        node: ['24.0.0', '26']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node --test packages/traces/test/cli.test.js packages/traces/test/store.test.js
+      - run: npm pack ./packages/traces --ignore-scripts
+      - run: node scripts/verify-traces-pack.mjs expose402-0.1.0.tgz
