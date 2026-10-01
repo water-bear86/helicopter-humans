@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { createDemo, conventionalPaths, discover } from '../lib/cli.js'
 import { preview, summary } from '../lib/store.js'
 
-const entry = fileURLToPath(new URL('../bin/hh-traces.js', import.meta.url))
+const entry = fileURLToPath(new URL('../bin/expose402.js', import.meta.url))
 const invoke = (args, input = '', options = {}) => spawnSync(process.execPath, [entry, ...args], { input, encoding: 'utf8', timeout: 10_000, ...options })
 function fixture(t) {
   const dir = mkdtempSync(join(tmpdir(), 'hh-cli-test-')), path = join(dir, 'checkpoints.sqlite')

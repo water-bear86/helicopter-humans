@@ -1,9 +1,9 @@
 {
-  "name": "helicopter-humans-traces",
+  "name": "expose402",
   "version": "0.1.0",
   "description": "Guided local discovery and confirmed whole-thread cleanup of saved x402 payment traces.",
   "type": "module",
-  "bin": { "hh-traces": "bin/hh-traces.js" },
+  "bin": { "expose402": "bin/expose402.js" },
   "files": ["bin/", "lib/", "README.md", "LICENSE"],
   "engines": { "node": ">=24.0.0" },
   "license": "MIT",

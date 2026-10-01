@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory(prefix="hh-real-store-") as directory:
     root = Path(directory)
     installed = subprocess.run(["npm", "install", "--prefix", directory, "--cache", str(root / "npm-cache"), "--ignore-scripts", "--no-audit", "--no-fund", archive], capture_output=True, text=True)
     assert installed.returncode == 0, installed.stderr
-    entry = root / "node_modules/helicopter-humans-traces/bin/hh-traces.js"
+    entry = root / "node_modules/expose402/bin/expose402.js"
     db = root / "actual.sqlite"
     with SqliteSaver.from_conn_string(str(db)) as saver:
         config = {"configurable": {"thread_id": "real-fixture", "checkpoint_ns": ""}}

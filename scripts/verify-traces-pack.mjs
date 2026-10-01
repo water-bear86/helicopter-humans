@@ -6,27 +6,27 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 
-const archive = resolve(process.argv[2] ?? 'dist/helicopter-humans-traces-0.1.0.tgz')
+const archive = resolve(process.argv[2] ?? 'dist/expose402-0.1.0.tgz')
 const directory = mkdtempSync(join(tmpdir(), 'hh-clean-install-'))
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const evidence = { platform: process.platform, arch: process.arch, node: process.version, outsideRepository: true, checks: [] }
 try {
   const install = spawnSync(npm, ['install', '--prefix', directory, '--cache', join(directory, 'npm-cache'), '--ignore-scripts', '--no-audit', '--no-fund', archive], { encoding: 'utf8', timeout: 60_000, shell: process.platform === 'win32' })
   assert.equal(install.status, 0, install.stderr)
-  const root = join(directory, 'node_modules', 'helicopter-humans-traces')
+  const root = join(directory, 'node_modules', 'expose402')
   const metadata = JSON.parse(readFileSync(join(root, 'package.json')))
-  assert.equal(metadata.name, 'helicopter-humans-traces')
+  assert.equal(metadata.name, 'expose402')
   assert.equal(metadata.version, '0.1.0')
   assert.equal(metadata.engines.node, '>=24.0.0')
   assert.equal(Object.keys(metadata.dependencies ?? {}).length, 0)
   evidence.checks.push('clean archive install; metadata; zero runtime dependencies')
   const nodeOnly = join(directory, 'node-only'); mkdirSync(nodeOnly)
   if (process.platform !== 'win32') symlinkSync(process.execPath, join(nodeOnly, 'node'))
-  const entry = join(root, 'bin', 'hh-traces.js')
+  const entry = join(root, 'bin', 'expose402.js')
   const env = { ...process.env, ...(process.platform === 'win32' ? {} : { PATH: nodeOnly }) }
   // PATH has only Node on macOS/Linux. There is no globally installed Python or sqlite executable to fall back to.
   const invoke = (args, input = '') => {
-    const executable = process.platform === 'win32' ? process.execPath : join(directory, 'node_modules', '.bin', 'hh-traces')
+    const executable = process.platform === 'win32' ? process.execPath : join(directory, 'node_modules', '.bin', 'expose402')
     const commandArgs = process.platform === 'win32' ? [entry, ...args] : args
     const result = spawnSync(executable, commandArgs, { cwd: directory, env, input, encoding: 'utf8', timeout: 15_000 })
     assert.equal(result.status, 0, result.stderr || String(result.error))

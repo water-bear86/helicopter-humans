@@ -7,17 +7,17 @@ import { DatabaseSync } from 'node:sqlite'
 import { preview, summary, removeSelected, recover, Refusal, SCHEMA } from './store.js'
 
 export const VERSION = '0.1.0'
-const HELP = `Helicopter Humans traces ${VERSION}
+const HELP = `expose402 ${VERSION}
 Guided, local payment-trace discovery. Starts with a read-only preview.
 
-hh-traces                 Find conventional history files and choose one
-hh-traces --demo          Try clearly invented history (never your real data)
-hh-traces --store PATH    Choose a local LangGraph history file
-hh-traces --preview       Stop after the read-only summary
-hh-traces --discover      List candidate locations without opening stores
-hh-traces --recover FILE --store PATH
+expose402                      Find conventional history files and choose one
+expose402 --demo               Try clearly invented history (never your real data)
+expose402 --store PATH         Choose a local LangGraph history file
+expose402 --preview            Stop after the read-only summary
+expose402 --discover           List candidate locations without opening stores
+expose402 --recover FILE --store PATH
                           Check whether an interrupted removal applied
-hh-traces --help | --version
+expose402 --help | --version
 
 Requires Node.js 24+. No Python, account, wallet, payment, telemetry or upload.
 Supported: LangGraph SqliteSaver 3.1.1 two-table SQLite layout. Searches are

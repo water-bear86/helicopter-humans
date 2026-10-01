@@ -2,24 +2,24 @@
 
 A privacy layer for your agent. Don't be a helicopter human. Let your agent have a little bit of privacy.
 
-## Start local trace discovery
+## Start expose402, the free local trace utility
 
 Requires Node.js 24+. One command starts bounded discovery and a read-only preview:
 
 ```sh
-npx --yes https://helicopter-humans.vercel.app/helicopter-humans-traces-0.1.0.tgz
+npx --yes expose402@0.1.0
 ```
 
 Choose a supported LangGraph history file or a clearly invented demo. Removal requires explicit thread selection, impact review, a stopped agent and typed confirmation. It deletes selected threads' entire saved history; empty selection and cancellation remove nothing. No Python, account, wallet, payment, telemetry or history upload. npm downloads the package; the tool itself stays local.
 
-This is the project's hosted npm archive, not a registry publication. Registry authentication/project ownership remains a separate prerequisite. [Package guide](packages/traces/README.md) covers supported sources, exact discovery paths, limits and recovery receipts. The raw [Python tool](docs/PAYMENT_TRACE_CLEANER.md) remains an advanced option.
+The [npm package](https://www.npmjs.com/package/expose402) is published as `expose402@0.1.0`. The [current guide](https://helicopter-humans.vercel.app/traces-guide.txt) covers supported sources, exact discovery paths, limits and recovery receipts. The matching archive remains available as an advanced download. The raw [Python tool](docs/PAYMENT_TRACE_CLEANER.md) remains an advanced option.
 
 ## Current and historical source surfaces
 
 | Part | State | Where |
 | --- | --- | --- |
 | Offline log tool | Free single-file download. Local text-file input, exact-phrase masking, editable preview, reviewed export and clear. Public page is sample-only | `src/offline.ts`, `src/redact.ts`, `docs/OFFLINE_LOG_TOOL.md` |
-| Payment-trace cleaner | Free guided Node CLI in an installable npm archive. Bounded discovery, read-only preview and explicitly confirmed whole-thread removal. Zero runtime dependencies or network calls | `packages/traces/`, `packages/traces/README.md` |
+| expose402 | Free guided Node CLI published on npm. Bounded discovery, read-only preview and explicitly confirmed whole-thread removal. Zero runtime dependencies or network calls | `packages/traces/`, `packages/traces/README.md` |
 | z402 | Design proposal for payment/transport unlinkability by default; no deployed proof/verifier, shielded-credit ledger or rollup | `docs/Z402_DESIGN.md` |
 | classified.exe terminal | Demo with invented text only. Unknown input is not echoed or retained in history | `src/terminal.ts` |
 | Checkout button | Always off. No build variable can open it | `src/main.ts` |
@@ -90,7 +90,7 @@ vercel deploy --prod --yes --scope redemption-c64d16c8
 
 The emitted-function smoke check matters: Vite/Vitest resolve extensionless imports, while Node ESM in the deployed function requires `.js` import specifiers. Keep those extensions throughout the function's runtime dependency chain. The functions import the `packages/payment-adapter` workspace; `vercel build` copies it into each function and records the `node_modules` link in `.vc-config.json` (`filePathMap`). If deploying the exact local Vercel build instead, add `--prebuilt` to the deploy command.
 
-The landing page leads with the guided Node package and a copyable, versioned archive command. After deployment, execute that public command with a fresh npm cache, verify the package/guide bytes against `traces-sha256.json`, and check the start flow, clipboard fallback, whole-thread explanation, FAQ, helicopter motion and reduced-motion alternative on desktop/mobile. The isolated historical source/artifacts are not landing-page offers. `/checkout.html` must remain closed. `GET /api/status` must report payment/checkout collection false and the public quote/order POST routes must return 503. Protocol protection remains unimplemented.
+The landing page leads with the guided Node package and a copyable, versioned registry command. After deployment, execute that public command with a fresh npm cache, verify the package/guide bytes against `traces-sha256.json`, and check the start flow, clipboard fallback, whole-thread explanation, FAQ, helicopter motion and reduced-motion alternative on desktop/mobile. The isolated historical source/artifacts are not landing-page offers. `/checkout.html` must remain closed. `GET /api/status` must report payment/checkout collection false and the public quote/order POST routes must return 503. Protocol protection remains unimplemented.
 
 Do not enable the Founding Pass merely by adding a link: price, payout account, deliverable and refund terms must be settled first. The payment adapter is separate work. Merchant setup, a working shielded payer, durable replay storage, verified binding between a payment and its buyer/request, and an authorized end-to-end check are still required for live collection. No seed, spend key, or viewing key belongs in this repository.
 

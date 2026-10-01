@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 
-const COMMAND = 'npx --yes https://helicopter-humans.vercel.app/helicopter-humans-traces-0.1.0.tgz'
+const COMMAND = 'npx --yes expose402@0.1.0'
 test('guided start explains prerequisites, local scope, demo and whole-thread impact', async ({ page }, testInfo) => {
   await page.goto('/#start')
   const section = page.locator('#start')
@@ -17,7 +17,7 @@ test('guided start explains prerequisites, local scope, demo and whole-thread im
   await section.screenshot({ path: testInfo.outputPath('guided-start.png') })
 })
 
-test('copy button copies the exact archive command; denial selects it with useful help', async ({ page }) => {
+test('copy button copies the exact registry command; denial selects it with useful help', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { document.documentElement.dataset.copied = text } } })
   })
@@ -38,15 +38,19 @@ test('package, guide and advanced source downloads match the production build', 
     page.waitForEvent('download'),
     page.getByRole('link', { name: 'Download the npm package archive' }).click(),
   ])
-  expect(download.suggestedFilename()).toBe('helicopter-humans-traces-0.1.0.tgz')
+  expect(download.suggestedFilename()).toBe('expose402-0.1.0.tgz')
   const bytes = await readFile((await download.path())!)
-  expect(bytes).toEqual(await readFile('dist/helicopter-humans-traces-0.1.0.tgz'))
+  expect(bytes).toEqual(await readFile('dist/expose402-0.1.0.tgz'))
   const manifest = await (await page.request.get('/traces-sha256.json')).json() as { package: string; version: string; files: Record<string, string>; archiveFiles: string[] }
-  expect(manifest.package).toBe('helicopter-humans-traces')
+  expect(manifest.package).toBe('expose402')
   expect(manifest.version).toBe('0.1.0')
   expect(manifest.files[download.suggestedFilename()]).toBe(createHash('sha256').update(bytes).digest('hex'))
   expect(manifest.archiveFiles).toHaveLength(7)
-  for (const [url, file] of [['/traces-guide.txt', 'packages/traces/README.md'], ['/memory-cleaner.py', 'tools/memory-cleaner/memory_cleaner.py'], ['/memory-cleaner-guide.txt', 'docs/PAYMENT_TRACE_CLEANER.md'], ['/z402-design.txt', 'docs/Z402_DESIGN.md']]) {
+  const guide = await (await page.request.get('/traces-guide.txt')).text()
+  expect(guide).toContain(COMMAND)
+  expect(guide).not.toContain('not published to the npm registry')
+  expect(manifest.files['traces-guide.txt']).toBe(createHash('sha256').update(guide).digest('hex'))
+  for (const [url, file] of [['/traces-guide.txt', 'dist/traces-guide.txt'], ['/memory-cleaner.py', 'tools/memory-cleaner/memory_cleaner.py'], ['/memory-cleaner-guide.txt', 'docs/PAYMENT_TRACE_CLEANER.md'], ['/z402-design.txt', 'docs/Z402_DESIGN.md']]) {
     const response = await page.request.get(url)
     expect(response.ok()).toBeTruthy()
     expect(await response.body()).toEqual(await readFile(file))

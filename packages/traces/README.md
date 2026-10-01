@@ -1,16 +1,16 @@
-# Helicopter Humans traces
+# expose402
 
-A guided local utility for finding possible x402/payment traces in saved agent history, then explicitly choosing which whole threads to remove. Start with a preview. No account, wallet, payment, telemetry or upload of history.
+A free guided local utility for finding possible x402/payment traces in saved agent history, then explicitly choosing which whole threads to remove. Start with a preview. No account, wallet, payment, telemetry or upload of history.
 
 ## Start
 
 Install **Node.js 24 or newer** from [nodejs.org](https://nodejs.org/en/download), then paste this into your terminal:
 
 ```sh
-npx --yes https://helicopter-humans.vercel.app/helicopter-humans-traces-0.1.0.tgz
+npx --yes expose402@0.1.0
 ```
 
-This is a versioned npm package archive hosted by the project. The package is **not published to the npm registry** yet. Do not use the short registry package command until registry publication is confirmed. `npx --yes` approves downloading the package, **not deleting history**. npm contacts the download host to install it; the utility itself makes no network requests. No Python, system SQLite executable or additional dependency is needed.
+The npm package and command are named `expose402`. `npx --yes` approves downloading the package, **not deleting history**. npm contacts the registry to install it; the utility itself makes no network requests. No Python, system SQLite executable or additional dependency is needed.
 
 Not sure what this does? Use the same command with `--demo` at the end. Every finding in that demo is invented; its temporary files are discarded when it exits. Use `--preview` to stop after the summary, `--help` for options or `--version` for the version. Node 24 may print an experimental SQLite warning; this comes from Node, not a payment request or an upload.
 
@@ -28,7 +28,7 @@ The published archive's SHA-256 is in [traces-sha256.json](https://helicopter-hu
 You can choose a store directly:
 
 ```sh
-npx --yes https://helicopter-humans.vercel.app/helicopter-humans-traces-0.1.0.tgz --store "/path/to/your/history.sqlite" --preview
+npx --yes expose402@0.1.0 --store "/path/to/your/history.sqlite" --preview
 ```
 
 ## What is supported
@@ -54,7 +54,7 @@ Confirmed removal uses one transaction covering both tables, with a file-identit
 After an interruption, use the receipt path displayed by the tool (or a receipt in that folder):
 
 ```sh
-npx --yes https://helicopter-humans.vercel.app/helicopter-humans-traces-0.1.0.tgz --recover "/path/to/receipt.json" --store "/path/to/history.sqlite"
+npx --yes expose402@0.1.0 --recover "/path/to/receipt.json" --store "/path/to/history.sqlite"
 ```
 
 Recovery is read-only. It reports `applied`, `not-applied`, or `changed-since-operation`; the last means the current content cannot establish the outcome. It is **not undo**. Do not blindly repeat a removal after an interrupted operation. A receipt protects operation assessment, not against an adversary editing your local files.
@@ -63,7 +63,7 @@ SQLite logical deletion is not secure erasure. Free pages, journals, WALs, backu
 
 ## Distribution and verification
 
-`helicopter-humans-traces@0.1.0`, executable `hh-traces`. Uses only built-in Node modules, including [node:sqlite](https://github.com/nodejs/node/blob/v24.0.0/doc/api/sqlite.md); no native addon, runtime dependency, install hook or global Python/tool requirement. Published archive includes only executable, source, package metadata, README and MIT license.
+`expose402@0.1.0`, executable `expose402`. Uses only built-in Node modules, including [node:sqlite](https://github.com/nodejs/node/blob/v24.0.0/doc/api/sqlite.md); no native addon, runtime dependency, install hook or global Python/tool requirement. Published archive includes only executable, source, package metadata, README and MIT license.
 
 macOS is exercised with the minimum Node 24.0.0 and current development Node. Windows/Linux path behavior is covered by tests; the repository CI matrix exercises packaged installs on all three operating systems. Check that run's result before treating Windows/Linux execution as verified. Runtime checks, clean `npm pack` installation, invented fixture paths and real LangGraph compatibility are recorded in the canonical launch issue.
 

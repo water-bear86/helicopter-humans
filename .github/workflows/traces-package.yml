@@ -18,4 +18,4 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: node --test packages/traces/test/cli.test.js packages/traces/test/store.test.js
       - run: npm pack ./packages/traces --ignore-scripts
-      - run: node scripts/verify-traces-pack.mjs helicopter-humans-traces-0.1.0.tgz
+      - run: node scripts/verify-traces-pack.mjs expose402-0.1.0.tgz
