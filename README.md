@@ -20,7 +20,7 @@ The [npm package](https://www.npmjs.com/package/expose402) is published as `expo
 | --- | --- | --- |
 | Offline log tool | Free single-file download. Local text-file input, exact-phrase masking, editable preview, reviewed export and clear. Public page is sample-only | `src/offline.ts`, `src/redact.ts`, `docs/OFFLINE_LOG_TOOL.md` |
 | expose402 | Free guided Node CLI published on npm. Bounded discovery, read-only preview and explicitly confirmed whole-thread removal. Zero runtime dependencies or network calls | `packages/traces/`, `packages/traces/README.md` |
-| z402 | Design proposal for payment/transport unlinkability by default; no deployed proof/verifier, shielded-credit ledger or rollup | `docs/Z402_DESIGN.md` |
+| z402 | Experimental local private purchases: native shielded ZEC, bounded signing, purchase-bound disclosures, encrypted delivery, portable receipts. Regtest only verified; hosted payment collection remains disabled | `packages/z402/`, `tools/z402-wallet/`, `docs/Z402_RUNBOOK.md` |
 | classified.exe terminal | Demo with invented text only. Unknown input is not echoed or retained in history | `src/terminal.ts` |
 | Checkout button | Always off. No build variable can open it | `src/main.ts` |
 | Invoice checkout (Founding Agent Pass preorder) | Prototype, collection hard-disabled. Runs only as a local fixture (`CHECKOUT_MODE=fixture`, never on a host). Draft offer, not approved | `src/checkout/`, `api/checkout/`, `checkout.html`, `docs/CHECKOUT.md` |
@@ -99,3 +99,28 @@ Do not enable the Founding Pass merely by adding a link: price, payout account, 
 `docs/RELAY.md` covers the local agent relay: privacy boundary, request/response and access contracts, SSRF controls, and the remaining step to usage credit. `docs/SANDBOX_TEST.md` is the operator runbook for the testnet check, the wallet evidence and the PostgreSQL deployment proposal.
 
 `docs/CHECKOUT.md` covers the CipherPay invoice checkout: order binding, states, the PostgreSQL store and migrations, secure configuration, readiness blockers and limitations. `docs/PAYMENT_ADAPTER.md` covers the earlier txid/x402 path, which stays disabled and is not the checkout.
+
+## Run a private agent purchase locally
+
+Docker, Node 24+, and Rust are required. The macOS bootstrap starts an isolated
+regtest chain and funds a sealed wallet with synthetic coins:
+
+```sh
+npm ci
+npm run z402:regtest
+Z402_REGTEST=1 npm run test:z402:live
+```
+
+The live test pays a cooperative merchant, decrypts the resource, retries after a
+restart, and independently verifies its portable receipt after the merchant exits.
+The proposed payment scheme and Zally Ironwood disclosure profile are experimental.
+See [the runbook](docs/Z402_RUNBOOK.md) for the privacy boundary and recovery limits.
+
+## Donate
+
+If you found this to be useful, consider donating by sending magic internet monies to:
+
+```text
+sol: 79TNuyFNZWhDeFF1RUNA5Xk9Pccvb7xPYqLukBxCeWbb
+evm: 0xa2c0abd1a1fcb5aee12f80651ae7f646371a66ed
+```

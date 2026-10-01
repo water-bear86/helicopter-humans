@@ -1,5 +1,12 @@
 # z402: payment privacy by default — design proposal
 
+> Implementation update: the repository now includes an experimental native Zcash
+> purchase slice in `packages/z402` and `tools/z402-wallet`. It implements signed
+> offers, durable local budgets, selected-output disclosures, encrypted delivery,
+> and independently verifiable merchant receipts. See [the runbook](Z402_RUNBOOK.md).
+> The credit ledger and rollup below remain proposals; hosted collection stays off.
+
+
 Angus's direction is a free discovery/removal tool now, followed by an x402-compatible transport/payment system that prevents payments from being linked to an agent by default. This document turns that direction into testable requirements. It is a proposal, not a working protocol, security proof or launch-readiness claim. The existing local relay, disabled checkout and verify-only ZEC adapter do not implement it.
 
 ## User contract and threat model

@@ -1,0 +1,12 @@
+{
+  "name": "@helicopter-humans/z402",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "Self-hosted private agent payments with portable Zcash payment disclosures.",
+  "engines": { "node": ">=24" },
+  "exports": { ".": { "types": "./types/index.d.ts", "default": "./index.js" } },
+  "scripts": { "test": "node --test test/" },
+  "dependencies": { "socks-proxy-agent": "8.0.5" }
+}

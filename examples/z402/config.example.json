@@ -1,0 +1,12 @@
+{
+  "network": "zcash:regtest",
+  "binary": "/absolute/checkout/tools/z402-wallet/target/debug/z402-wallet",
+  "nativeConfig": "/absolute/private/agent-native.json",
+  "database": "/absolute/private/agent.sqlite",
+  "storageKeyFile": "/absolute/private/storage-key.hex",
+  "budgetZat": "1000000",
+  "maxAmountZat": "100000",
+  "feeCapZat": "100000",
+  "merchants": {},
+  "torProxy": "socks5h://127.0.0.1:9050"
+}

@@ -11,3 +11,5 @@ screenshots
 .sandbox-local
 __pycache__/
 *.pyc
+tools/z402-wallet/target/
+.z402-local/

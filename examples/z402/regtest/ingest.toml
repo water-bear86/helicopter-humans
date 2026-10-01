@@ -1,0 +1,22 @@
+[network]
+name = "zcash-regtest"
+[node]
+json_rpc_addr = "http://zebra:18232"
+request_timeout_secs = 30
+[node.auth]
+method = "none"
+[storage]
+path = "/var/lib/zinder/canonical"
+raw_blob_policy = "transactions"
+[ingest]
+source = "zebra-json-rpc"
+reorg_window_blocks = 1000
+[ingest.run_overrides]
+coverage = "wallet-serving"
+[ingest_control]
+listen_addr = "127.0.0.1:9100"
+checkpoint_staging_root = "/var/lib/zinder/checkpoints"
+bearer_token_path = "/var/run/zinder-control/ingest.token"
+checkpoint_bearer_token_path = "/var/run/zinder-checkpoint/checkpoint.token"
+[ops]
+listen_addr = "127.0.0.1:9105"
