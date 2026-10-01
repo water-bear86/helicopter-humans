@@ -9,3 +9,5 @@ screenshots
 .tools-build
 .relay-local
 .sandbox-local
+__pycache__/
+*.pyc
