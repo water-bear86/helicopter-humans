@@ -4,7 +4,7 @@
   "description": "A privacy layer for your agent. Don't be a helicopter human.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && node scripts/build-offline.mjs",
+    "build": "tsc && vite build && node scripts/build-offline.mjs && node scripts/build-memory-cleaner.mjs && node scripts/build-traces.mjs",
     "preview": "vite preview",
     "typecheck": "tsc",
     "lint": "eslint .",
@@ -12,6 +12,9 @@
     "test:e2e": "playwright test",
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
     "test:packages": "npm test --workspaces --if-present",
+    "test:memory-cleaner": "python3 -m unittest discover -s tools/memory-cleaner/tests -p 'test_*.py' -v",
+    "test:traces": "node --test packages/traces/test/*.test.js",
+    "verify:traces-pack": "node scripts/verify-traces-pack.mjs",
     "test:pg": "vitest run src/checkout/store-postgres.test.ts",
     "smoke:functions": "node scripts/smoke-functions.mjs",
     "tools:build": "vite build --config vite.tools.config.ts --logLevel warn",

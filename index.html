@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Helicopter Humans | A privacy layer for your agent</title>
-    <meta name="description" content="Don't be a helicopter human. Let your agent have a little bit of privacy. Free offline log preparation. Agent privacy relay coming soon." />
+    <title>Helicopter Humans | Find and clean up saved payment traces</title>
+    <meta name="description" content="Don't be a helicopter human. One guided command to find saved x402 payment traces locally. Preview first, choose threads, confirm cleanup. Free Node tool for LangGraph SQLite." />
     <meta name="theme-color" content="#c6ff00" />
     <meta property="og:title" content="Helicopter Humans" />
-    <meta property="og:description" content="A privacy layer for your agent. Don't be a helicopter human." />
+    <meta property="og:description" content="One guided command to find saved x402 payment traces locally. Preview first, choose threads, confirm cleanup. Free Node tool for LangGraph SQLite." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
@@ -20,10 +20,9 @@
       </a>
       <nav aria-label="Main">
         <ul>
-          <li><a href="#redactor">Redactor</a></li>
-          <li><a href="#demo">Demo</a></li>
+          <li><a href="#start">Start here</a></li>
           <li><a href="#how">How</a></li>
-          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#z402">z402</a></li>
           <li><a href="#faq">FAQ</a></li>
         </ul>
       </nav>
@@ -44,7 +43,7 @@
             <p id="story-caption">Your agent closes the curtain. The human finds a new hobby.</p>
           </div>
           <svg class="story-scene" viewBox="0 0 1000 560" role="img" aria-labelledby="story-title">
-            <title id="story-title">A human and their robot copilot spy on an agent and print its logs. The room agent runs redact.exe, closes a privacy curtain and sends the helicopter away.</title>
+            <title id="story-title">A human and their robot copilot spy on an agent and print its logs. The room agent reviews saved payment traces, closes a theatrical curtain and sends the helicopter away.</title>
             <defs>
               <pattern id="story-floor" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#ff2e93" stroke-width="2" /></pattern>
             </defs>
@@ -71,26 +70,26 @@
               </g>
               <rect x="728" y="261" width="162" height="117" fill="#0a0a0a" stroke="#0a0a0a" stroke-width="5" />
               <rect x="735" y="268" width="148" height="96" fill="#1a0033" />
-              <g class="room-logs" fill="#c6ff00"><text x="746" y="292" class="scene-small">diary.log</text><text x="746" y="314" class="scene-small">tea at 4</text><text x="746" y="336" class="scene-small">plan: nap</text></g>
+              <g class="room-logs" fill="#c6ff00"><text x="746" y="292" class="scene-small">payments.log</text><text x="746" y="314" class="scene-small">HTTP 402</text><text x="746" y="336" class="scene-small">receipt</text></g>
               <path d="M809 378V400M760 400H870" stroke="#0a0a0a" stroke-width="8" />
               <rect class="run-button" x="741" y="406" width="142" height="29" fill="#c6ff00" stroke="#0a0a0a" stroke-width="4" />
-              <text x="812" y="426" text-anchor="middle" class="scene-small">run redact.exe</text>
+              <text x="812" y="426" text-anchor="middle" class="scene-small">clean traces</text>
               <g class="privacy-curtain">
                 <rect x="566" y="184" width="348" height="294" fill="#c6ff00" />
                 <path d="M590 184V478M625 184V478M660 184V478M695 184V478M730 184V478M765 184V478M800 184V478M835 184V478M870 184V478M905 184V478" stroke="#0a0a0a" stroke-width="2" opacity=".15" />
                 <rect x="609" y="263" width="264" height="124" fill="#0a0a0a" />
-                <text x="741" y="293" text-anchor="middle" class="scene-label" fill="#c6ff00">redact.exe</text>
-                <text x="741" y="329" text-anchor="middle" class="scene-label" fill="#c6ff00">[REDACTED]</text>
-                <text x="741" y="364" text-anchor="middle" class="scene-small" fill="#fdf6e3">HUMAN ACCESS: DENIED</text>
+                <text x="741" y="293" text-anchor="middle" class="scene-label" fill="#c6ff00">trace.exe</text>
+                <text x="741" y="329" text-anchor="middle" class="scene-label" fill="#c6ff00">[REMOVED]</text>
+                <text x="741" y="364" text-anchor="middle" class="scene-small" fill="#fdf6e3">CURTAIN: CLOSED</text>
               </g>
             </g>
             <g class="story-chopper" transform="translate(80 64) scale(1.55)">
               <g class="story-heli"><use href="#helicopter-character" /></g>
               <g class="story-printer">
                 <g class="paper-stream">
-                  <g class="paper-strip"><path d="M122 122H167L174 152L167 182H122L115 152Z" fill="#fdf6e3" stroke="#0a0a0a" stroke-width="2" /><path d="M125 131v43m39-43v43" stroke="#0a0a0a" stroke-width="2" stroke-dasharray="2 5" /><text x="131" y="146" class="paper-log">tea at 4</text><text x="131" y="161" class="paper-log">plan: nap</text></g>
-                  <g class="paper-strip"><path d="M122 122H167L174 152L167 182H122L115 152Z" fill="#fdf6e3" stroke="#0a0a0a" stroke-width="2" /><path d="M125 131v43m39-43v43" stroke="#0a0a0a" stroke-width="2" stroke-dasharray="2 5" /><text x="131" y="146" class="paper-log">tea at 4</text><text x="131" y="161" class="paper-log">plan: nap</text></g>
-                  <g class="paper-strip"><path d="M122 122H167L174 152L167 182H122L115 152Z" fill="#fdf6e3" stroke="#0a0a0a" stroke-width="2" /><path d="M125 131v43m39-43v43" stroke="#0a0a0a" stroke-width="2" stroke-dasharray="2 5" /><text x="131" y="146" class="paper-log">tea at 4</text><text x="131" y="161" class="paper-log">plan: nap</text></g>
+                  <g class="paper-strip"><path d="M122 122H167L174 152L167 182H122L115 152Z" fill="#fdf6e3" stroke="#0a0a0a" stroke-width="2" /><path d="M125 131v43m39-43v43" stroke="#0a0a0a" stroke-width="2" stroke-dasharray="2 5" /><text x="131" y="146" class="paper-log">HTTP 402</text><text x="131" y="161" class="paper-log">receipt</text></g>
+                  <g class="paper-strip"><path d="M122 122H167L174 152L167 182H122L115 152Z" fill="#fdf6e3" stroke="#0a0a0a" stroke-width="2" /><path d="M125 131v43m39-43v43" stroke="#0a0a0a" stroke-width="2" stroke-dasharray="2 5" /><text x="131" y="146" class="paper-log">HTTP 402</text><text x="131" y="161" class="paper-log">receipt</text></g>
+                  <g class="paper-strip"><path d="M122 122H167L174 152L167 182H122L115 152Z" fill="#fdf6e3" stroke="#0a0a0a" stroke-width="2" /><path d="M125 131v43m39-43v43" stroke="#0a0a0a" stroke-width="2" stroke-dasharray="2 5" /><text x="131" y="146" class="paper-log">HTTP 402</text><text x="131" y="161" class="paper-log">receipt</text></g>
                 </g>
                 <rect x="111" y="101" width="67" height="28" fill="#fdf6e3" stroke="#0a0a0a" stroke-width="4" />
                 <rect x="117" y="107" width="44" height="9" fill="#0a0a0a" /><circle cx="170" cy="111" r="3" fill="#ff2e93" />
@@ -105,20 +104,20 @@
             <button type="button" class="motion-toggle" aria-pressed="false" hidden>Pause motion</button>
             <a class="story-skip" href="#top">Skip to the good stuff</a>
           </div>
-          <p class="story-static">The human prints the agent's logs. The agent runs redact.exe. The curtain closes. The human is left hovering.</p>
+          <p class="story-static">The human prints payment traces. The agent reviews its saved history. The curtain closes. This scene is helicopter theatre; the tool cleans selected local records.</p>
         </div>
       </section>
 
       <section class="hero" id="top" aria-labelledby="hero-title">
         <div class="hero-copy">
           <p class="stamp">Classified</p>
-          <h1 id="hero-title">A privacy layer for your agent.</h1>
+          <h1 id="hero-title">Your agent paid. It left a trace.</h1>
           <p class="lede">Don't be a helicopter human. <mark>Let your agent have a little bit of privacy.</mark></p>
           <div class="actions">
-            <a class="btn btn-primary" href="#redactor">Redact a log now. Free</a>
-            <a class="btn" href="#pricing">Meet the relay</a>
+            <a class="btn btn-primary" href="#start">Start local discovery. Free</a>
+            <a class="btn" href="#z402">Next flight: z402</a>
           </div>
-          <p class="fineprint">Less hovering. More doing. Start with the free redactor. The relay is coming soon.</p>
+          <p class="fineprint">Free. Local. Inspectable. Discover saved x402 traces in LangGraph SQLite, then choose which threads to remove.</p>
         </div>
 
         <figure class="window hero-art">
@@ -171,66 +170,34 @@
       <section class="availability" aria-labelledby="avail-title">
         <h2 id="avail-title" class="sr-only">What is live</h2>
         <ul>
-          <li class="pill pill-live"><strong>Free</strong> Offline log tool</li>
-          <li class="pill pill-demo"><strong>Demo</strong> classified.exe</li>
-          <li class="pill pill-off"><strong>Coming soon</strong> Agent privacy relay</li>
+          <li class="pill pill-live"><strong>Free</strong> expose402 trace cleaner</li>
+          <li class="pill pill-off"><strong>Design stage</strong> z402 payment privacy</li>
         </ul>
       </section>
 
-      <section class="section" id="redactor" aria-labelledby="redactor-title">
+      <section class="section" id="start" aria-labelledby="memory-cleaner-title">
+        <span id="memory-cleaner" aria-hidden="true"></span>
         <div class="section-head">
-          <h2 id="redactor-title">Less oversharing. Better bug reports.</h2>
-          <p>Keep the useful clues. Lose the API key, customer name and private aside. Download the single-file tool, open it locally, mask what matters and review the copy before it goes anywhere.</p>
-          <p><a class="btn btn-primary" href="/offline-redactor.html" download="helicopter-humans-offline.html">Download offline log tool</a></p>
-          <p class="fineprint">Save the HTML file and open the saved copy in your browser. No account or installation. The public preview below uses invented text only.</p>
+          <h2 id="memory-cleaner-title">Find the receipts. Choose what stays.</h2>
+          <p>Find possible x402 payment traces in saved agent history. Review the affected threads. Remove the ones you choose, right on your machine.</p>
         </div>
-        <div class="window redactor">
-          <div class="titlebar"><span>redact.exe <span class="tag tag-demo">SAMPLE</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
-          <div class="redactor-body">
-            <div class="field">
-              <label for="redact-in">Invented sample (read only)</label>
-              <textarea id="redact-in" rows="9" spellcheck="false" readonly placeholder="Load the sample to see the first pass."></textarea>
-            </div>
-            <div class="redactor-controls">
-              <button type="button" class="btn btn-primary" id="redact-run">Shred it</button>
-              <button type="button" class="btn" id="redact-sample">Load embarrassing sample</button>
-              <p id="redact-summary" class="summary" role="status" aria-live="polite"></p>
-            </div>
-            <div class="field">
-              <label for="redact-out">Declassified output</label>
-              <textarea id="redact-out" rows="9" spellcheck="false" readonly></textarea>
-            </div>
-            <div class="redactor-controls">
-              <button type="button" class="btn" id="redact-copy" disabled>Copy output</button>
-            </div>
+        <div class="window">
+          <div class="titlebar"><span>expose402 0.1.0 <span class="tag tag-demo">GUIDED LOCAL TOOL</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <div class="cleaner-body">
+            <p><strong>One command. A guided preview.</strong> Paste this into your terminal. It helps you choose a supported history file, then shows possible traces before changing anything.</p>
+            <pre class="start-command"><code id="start-command">npx --yes expose402@0.1.0</code></pre>
+            <div class="command-actions"><button class="btn btn-primary" id="copy-command" type="button">Copy start command</button><span id="copy-status" role="status" aria-live="polite"></span></div>
+            <p><strong>Need Node?</strong> Install <a href="https://nodejs.org/en/download" target="_blank" rel="noopener noreferrer">Node.js 24 or newer</a>, open Terminal on Mac/Linux or PowerShell on Windows, then paste the command. No Python or extra packages to arrange.</p>
+            <p><strong>No history found?</strong> Choose the clearly labeled invented demo. You can also enter your agent app's history path. The tool checks a few conventional filenames; it never searches your whole machine.</p>
+            <p><strong>First supported store: LangGraph SQLite.</strong> No account, wallet, payment, telemetry or history upload. npm downloads the tool; your saved history stays local.</p>
+            <p>Choose the threads, review the impact, stop the agent and explicitly confirm. Cleanup removes the selected thread's <strong>entire saved history and pending writes</strong>; other threads stay intact. Enter or cancellation removes nothing.</p>
+            <p class="fineprint">Matches are possible payment traces, including challenges and failed attempts. They do not prove a payment happened. Local cleanup cannot erase blockchain, provider or backup records.</p>
+            <p><a href="/traces-guide.txt">Read the local guide</a> · <a href="/traces-sha256.json">Package checksums</a></p>
           </div>
         </div>
-        <p class="fineprint">The offline tool prepares an excerpt for sharing. It does not hide an agent's activity from its owner or protect its runtime. Patterns miss private prose and unfamiliar secrets; add custom phrases and review the entire output.</p>
-      </section>
-
-      <section class="section" id="demo" aria-labelledby="demo-title">
-        <div class="section-head">
-          <h2 id="demo-title">Meet the agent. Mind the door.</h2>
-          <p>Welcome to a very classified bedroom. Try <code>peek</code>, then <code>shut door</code>. The door has opinions. So does the agent. These commands use invented text; keep your own logs in the offline tool.</p>
-        </div>
-        <div class="window terminal">
-          <div class="titlebar"><span>classified.exe <span class="tag tag-demo">DEMO</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
-          <div class="screen">
-            <div id="term-out" class="term-out" role="log" aria-live="polite" aria-label="Terminal output"></div>
-            <form id="term-form" class="term-form" autocomplete="off">
-              <label for="term-in" class="prompt">agent@bedroom:~$</label>
-              <input id="term-in" name="command" type="text" spellcheck="false" autocapitalize="off" maxlength="48" placeholder="Demo commands only. Try help." />
-            </form>
-          </div>
-          <div class="chips" aria-label="Quick commands">
-            <button type="button" class="chip" data-cmd="peek">peek</button>
-            <button type="button" class="chip" data-cmd="shut door">shut door</button>
-            <button type="button" class="chip" data-cmd="hover">hover</button>
-            <button type="button" class="chip" data-cmd="redact">redact</button>
-            <button type="button" class="chip" data-cmd="status">status</button>
-            <button type="button" class="chip" data-cmd="help">help</button>
-          </div>
-        </div>
+        <p class="fineprint">Next flight: z402. Our direction is payment privacy by default, using shielded payment proofs and a privacy transport. <a href="/z402-design.txt">Read the design proposal</a>. The protocol is coming soon; this cleaner handles supported local history today.</p>
+        <p class="fineprint"><a href="https://github.com/water-bear86/helicopter-humans/tree/feat/49th-8-agent-memory-cleaner/packages/traces">Inspect the package source and tests</a></p>
+        <details class="advanced-tool"><summary>Advanced downloads</summary><p><a href="/expose402-0.1.0.tgz" download>Download the npm package archive</a> · <a href="/memory-cleaner.py" download="memory-cleaner.py">Python script</a> · <a href="/memory-cleaner-guide.txt">Python guide</a></p></details>
       </section>
 
       <section class="section" id="how" aria-labelledby="how-title">
@@ -240,46 +207,32 @@
         <ol class="steps">
           <li class="card">
             <span class="step-no">01</span>
-            <h3>Pick an excerpt</h3>
-            <p>Open the downloaded tool locally. Bring only the lines needed for your bug report or teammate.</p>
+            <h3>Discover the traces</h3>
+            <p>Run the start command. Choose a supported local LangGraph history file, or explore the clearly invented demo. The preview shows candidate matches without printing saved secrets.</p>
           </li>
           <li class="card">
             <span class="step-no">02</span>
-            <h3>Mask the private bits</h3>
-            <p>Replace common patterns and add exact names or phrases the automatic pass cannot know.</p>
+            <h3>Review the selection</h3>
+            <p>Preview removal before changing anything. Choose the threads to clean; removal covers their entire saved history and pending writes.</p>
           </li>
           <li class="card">
             <span class="step-no">03</span>
-            <h3>Review. Then share.</h3>
-            <p>Read and edit the entire preview, confirm your review, then export that copy. Clear the fields when finished.</p>
-          </li>
-          <li class="card card-soon">
-            <span class="step-no">??</span>
-            <h3>Next: less hovering.</h3>
-            <p>Your agent has places to be and humans to avoid. On the flight plan: a privacy relay with direct shielded ZEC payments. Keep an eye on the landing pad.</p>
+            <h3>Confirm. Then clean.</h3>
+            <p>Stop the agent, confirm the impact and type the requested confirmation. Other threads stay intact. Cancellation and an empty selection remove nothing.</p>
           </li>
         </ol>
       </section>
 
-      <section class="section" id="pricing" aria-labelledby="pricing-title">
+      <section class="section" id="z402" aria-labelledby="z402-title">
         <div class="section-head">
-          <h2 id="pricing-title">Pick your level of classified.</h2>
+          <h2 id="z402-title">The next flight: privacy by default.</h2>
+          <p>Cleanup handles what your agent already saved. z402 is our planned payment and transport protocol, aiming to protect the link between an x402 payment and your agent when the payment happens.</p>
         </div>
-        <div class="plans">
-          <div class="card plan">
-            <h3>Redactor</h3>
-            <p class="price">Free</p>
-            <p>Offline excerpt preparation. Custom masking, editable preview and reviewed export. No account or invoice.</p>
-            <a class="btn" href="#redactor">Use it</a>
-          </div>
-          <div class="card plan plan-hot">
-            <p class="stamp stamp-small">Founding</p>
-            <h3>Founding Agent Pass</h3>
-            <p class="price" id="price-label">Coming soon</p>
-            <p>Get in on the next flight. Founding access to the agent privacy relay is coming soon. A little less supervision. A little more room to do its thing.</p>
-            <a class="btn btn-primary" id="checkout-btn" href="#pricing" aria-disabled="true">Passes coming soon</a>
-            <p class="fineprint" id="checkout-note">While we ready the landing pad, take the free redactor for a spin.</p>
-          </div>
+        <div class="card">
+          <p class="stamp stamp-small">Design stage</p>
+          <h3>Less cleanup. More privacy.</h3>
+          <p>The proof, settlement and transport design is under review. A protected payment route is still to be built; the free cleaner works with supported local history today.</p>
+          <p><a class="btn" href="/z402-design.txt">Read the z402 design proposal</a></p>
         </div>
       </section>
 
@@ -289,24 +242,28 @@
         </div>
         <div class="faq">
           <details>
-            <summary>Where do I use my own logs?</summary>
-            <p>In the downloaded HTML file, opened locally. Its script and styles are embedded, network connections are blocked, and it saves no session. This page only demonstrates invented text. Your browser, extensions and device still need to be trusted.</p>
+            <summary>What can I scan?</summary>
+            <p>The first supported store is local LangGraph SQLite history using the SqliteSaver 3.1.1 layout. The Node.js 24+ package checks saved checkpoints and pending writes for possible x402 payment markers. Other agent stores are not supported yet. If no history is found, choose the invented demo or enter your app's configured history path.</p>
           </details>
           <details>
-            <summary>Will it catch everything?</summary>
-            <p>No. It recognises common credentials, emails, wallet addresses, key blocks, card numbers, IPv4 addresses and home-folder usernames. Names, addresses and private sentences can pass through unchanged. Add exact phrases, read the entire preview and remove anything else before export. It cannot undo a disclosure or stop someone with access to your agent.</p>
+            <summary>Does it remove just the receipt?</summary>
+            <p>It removes the entire saved history and pending writes of each thread you explicitly select. Preview that selection before applying it. Other threads stay intact. It does not edit individual messages or erase blockchain, provider or backup records.</p>
           </details>
           <details>
-            <summary>When does the relay take off?</summary>
-            <p>Coming soon. We are building toward direct shielded ZEC payments and a hosted agent relay. For now, take the free redactor for a spin; passes will open when the landing pad is ready.</p>
+            <summary>Will it find every payment?</summary>
+            <p>No. Matches can be challenges or failed attempts rather than settled payments. A scan with no matches does not prove there are no payment records; other stores and unrecognised formats are outside its scope.</p>
+          </details>
+          <details>
+            <summary>Is z402 protecting my payments already?</summary>
+            <p>z402 is at the design stage. The cleaner discovers and removes supported local records; automatic protection during payment needs the separate proof, settlement and transport implementation.</p>
           </details>
           <details>
             <summary>Do you track me?</summary>
-            <p>This site loads no analytics, no third-party scripts and no web fonts. Our hosting provider still sees ordinary request logs, like every website.</p>
+            <p>The cleaner runs on your machine with no history uploads or telemetry. npm downloads the package before it runs; downloading does not approve removal. This site loads no analytics, third-party scripts or web fonts. Our hosting provider sees ordinary website and download request logs.</p>
           </details>
           <details>
             <summary>Is this a joke?</summary>
-            <p>The helicopter is a joke. Leaking secrets from agent logs is not.</p>
+            <p>The helicopter is a joke. Your agent keeping a payment diary is not.</p>
           </details>
         </div>
       </section>

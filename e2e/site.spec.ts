@@ -4,106 +4,63 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-test('redactor shreds the sample and reports counts', async ({ page }) => {
-  await page.getByRole('button', { name: 'Load embarrassing sample' }).click()
-  const out = page.getByLabel('Declassified output')
-  await expect(out).toHaveValue(/\[EMAIL\]/)
-  await expect(out).not.toHaveValue(/ada\.lovelace@example\.com/)
-  await expect(out).not.toHaveValue(/sk-proj-/)
-  await expect(page.locator('#redact-summary')).toContainText('Shredded')
-  await expect(page.getByRole('button', { name: 'Copy output' })).toBeEnabled()
+test('the landing page leads to payment discovery and its guide', async ({ page }) => {
+  await expect(page).toHaveTitle('Helicopter Humans | Find and clean up saved payment traces')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your agent paid. It left a trace.')
+  await page.getByRole('link', { name: 'Skip to the good stuff' }).click()
+  await page.getByRole('link', { name: 'Start local discovery. Free' }).click()
+  await expect(page).toHaveURL(/#start$/)
+  await expect(page.getByRole('button', { name: 'Copy start command' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Read the local guide' })).toBeVisible()
+  await expect(page.locator('#how')).toContainText('entire saved history and pending writes')
 })
 
-test('redactor explains empty input instead of failing silently', async ({ page }) => {
-  await page.getByRole('button', { name: 'Shred it' }).click()
-  await expect(page.locator('#redact-summary')).toHaveText(/Nothing to shred/)
-  await expect(page.getByRole('button', { name: 'Copy output' })).toBeDisabled()
+test('navigation resolves to current content and retired offers are absent', async ({ page }) => {
+  for (const link of await page.getByRole('navigation').getByRole('link').all()) {
+    const target = await link.getAttribute('href')
+    expect(target).toMatch(/^#/)
+    await expect(page.locator(target!)).toHaveCount(1)
+  }
+  await expect(page.locator('body')).not.toContainText(/redactor|Founding Agent Pass|privacy relay|shielded ZEC|classified[.]exe/i)
+  await expect(page.locator('input,textarea,form')).toHaveCount(0)
 })
 
-test('terminal works from the keyboard: shut the door, then peeking is denied', async ({ page }) => {
-  const input = page.getByLabel('agent@bedroom:~$')
-  await input.fill('shut door')
-  await input.press('Enter')
-  await input.fill('peek')
-  await input.press('Enter')
-  await expect(page.getByRole('log')).toContainText('ACCESS DENIED.')
-  await input.press('ArrowUp')
-  await expect(input).toHaveValue('peek')
+test('availability separates the free cleaner from the z402 design', async ({ page }) => {
+  await expect(page.locator('.pill-live')).toHaveText(/Free\s+Payment-trace cleaner/)
+  await expect(page.locator('.pill-off')).toHaveText(/Design stage\s+z402 payment privacy/)
+  await page.getByRole('link', { name: 'Next flight: z402' }).click()
+  await expect(page).toHaveURL(/#z402$/)
+  await expect(page.locator('#z402')).toContainText('A protected payment route is still to be built')
 })
 
-test('terminal status matches the disabled ZEC prototype', async ({ page }) => {
-  const input = page.getByLabel('agent@bedroom:~$')
-  await input.fill('status')
-  await input.press('Enter')
-  const log = page.getByRole('log')
-  await expect(log).toContainText('direct shielded ZEC payment check')
-  await expect(log).toContainText('payment collection (no quote, no address, no charge)')
-  await expect(log).not.toContainText('x402')
+test('the FAQ explains whole-thread removal and local-only scope', async ({ page }) => {
+  await page.getByText('Does it remove just the receipt?', { exact: true }).click()
+  await expect(page.locator('details[open]')).toContainText('entire saved history and pending writes')
+  await expect(page.locator('details[open]')).toContainText('blockchain, provider or backup records')
 })
 
-test('public redactor is sample-only and points to the offline workflow', async ({ page }) => {
-  await expect(page.locator('#redact-in')).toHaveAttribute('readonly', '')
-  await expect(page.getByRole('link', { name: 'Download offline log tool' })).toHaveAttribute('download', 'helicopter-humans-offline.html')
-  await expect(page.locator('#redactor')).toContainText("does not hide an agent's activity")
+test('the page makes no third-party requests and renders without runtime errors', async ({ page, baseURL }) => {
+  const external: string[] = []
+  const errors: string[] = []
+  page.on('request', req => { if (!req.url().startsWith(baseURL ?? '')) external.push(req.url()) })
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  await page.reload()
+  await expect(page.getByRole('heading', { level: 1 })).toBeAttached()
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0)
+  expect(external).toEqual([])
+  expect(errors).toEqual([])
 })
 
-test('checkout stays closed even when a checkout URL was set at build time', async ({ page }) => {
-  // playwright.config.ts builds with VITE_CHECKOUT_URL=https://pay.example.com/should-never-open.
-  const checkout = page.locator('#checkout-btn')
-  await expect(checkout).toHaveAttribute('href', '#pricing')
-  expect(await page.content()).not.toContain('pay.example.com')
-  const scripts = await page.evaluate(async () => {
-    const urls = [...document.querySelectorAll<HTMLScriptElement>('script[src]')].map((s) => s.src)
-    return (await Promise.all(urls.map((u) => fetch(u).then((r) => r.text())))).join('\n')
-  })
-  expect(scripts).not.toContain('pay.example.com')
-})
-
-test('the free redactor never calls a server route', async ({ page }) => {
-  const api: string[] = []
-  page.on('request', (req) => {
-    if (new URL(req.url()).pathname.startsWith('/api/')) api.push(req.url())
-  })
-  await page.getByRole('button', { name: 'Load embarrassing sample' }).click()
-  await page.getByRole('button', { name: 'Shred it' }).click()
-  await expect(page.locator('#redact-summary')).toContainText('Shredded')
-  expect(api).toEqual([])
-})
-
-test('the checkout preview page is closed on the static build', async ({ page }) => {
+test('the checkout preview page remains closed on the static build', async ({ page }) => {
   await page.goto('/checkout.html')
   await expect(page.locator('#co-mode')).toContainText('Checkout is closed.')
   await expect(page.locator('#co-app')).toBeHidden()
 })
 
-test('checkout is visibly unavailable when not configured and does not navigate', async ({ page }) => {
-  const checkout = page.locator('#checkout-btn')
-  await expect(checkout).toHaveAttribute('aria-disabled', 'true')
-  await expect(checkout).toHaveText('Passes coming soon')
-  await expect(checkout).toBeDisabled()
-  await checkout.click({ force: true })
-  await expect(page).toHaveURL(/\/(#.*)?$/)
-  await expect(page.locator('#checkout-note')).toBeVisible()
-})
-
-test('availability distinguishes the offline tool and upcoming relay', async ({ page }) => {
-  await expect(page.locator('.pill-live')).toHaveText(/Free\s+Offline log tool/)
-  await expect(page.locator('.pill-off')).toHaveText(/Coming soon\s+Agent privacy relay/)
-})
-
-test('page makes no third-party requests', async ({ page, baseURL }) => {
-  const external: string[] = []
-  page.on('request', (req) => {
-    if (!req.url().startsWith(baseURL ?? '')) external.push(req.url())
-  })
-  await page.reload()
-  await page.getByRole('button', { name: 'Load embarrassing sample' }).click()
-  expect(external).toEqual([])
-})
-
 test('reduced motion stops animations', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  const name = await page.locator('.ticker-track').evaluate((el) => getComputedStyle(el).animationName)
+  const name = await page.locator('.ticker-track').evaluate(el => getComputedStyle(el).animationName)
   expect(name).toBe('none')
 })
 
@@ -123,7 +80,7 @@ test('the opening pins while scrolling from spying to privacy, and can rewind', 
   expect(pinned!.y).toBeCloseTo(0)
   await scrollToY(page, geometry.top + geometry.span * .8)
   await expect(page.locator('.privacy-story')).toHaveAttribute('data-stage','protected')
-  await expect(page.locator('#story-heading')).toHaveText('Access denied, human.')
+  await expect(page.locator('#story-heading')).toHaveText('Less history. Less hovering.')
   expect((await page.locator('.story-pin').boundingBox())!.y).toBeCloseTo(0)
   await scrollToY(page, geometry.top + geometry.span * .1)
   await expect(page.locator('.privacy-story')).toHaveAttribute('data-stage','spying')
@@ -185,7 +142,7 @@ test.describe('wide screens', () => {
     })
     expect(overlaps).toEqual([])
 
-    await page.locator('#redactor').scrollIntoViewIfNeeded()
+    await page.locator('#start').scrollIntoViewIfNeeded()
     await expect(flyer).toBeVisible()
     const box = (await flyer.boundingBox())!
     const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.flyer') ?? null, [box.x + box.width / 2, box.y + box.height / 2])
@@ -193,7 +150,7 @@ test.describe('wide screens', () => {
 
     // Primary actions still work with the flyer hovering over the hero.
     await page.locator('#top').scrollIntoViewIfNeeded()
-    await page.getByRole('link', { name: 'Redact a log now. Free' }).click()
-    await expect(page).toHaveURL(/#redactor$/)
+    await page.getByRole('link', { name: 'Start local discovery. Free' }).click()
+    await expect(page).toHaveURL(/#start$/)
   })
 })
