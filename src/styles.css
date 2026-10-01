@@ -1126,3 +1126,6 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+.cleaner-body { padding: 1.25rem; }
+.cleaner-body pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; line-height: 1.6; }
+.cleaner-body p + pre, .cleaner-body pre + p, .cleaner-body p + p { margin-top: 1rem; }

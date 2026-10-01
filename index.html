@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Helicopter Humans | A privacy layer for your agent</title>
-    <meta name="description" content="Don't be a helicopter human. Let your agent have a little bit of privacy. Free offline log preparation. Agent privacy relay coming soon." />
+    <meta name="description" content="Don't be a helicopter human. Find and clean up saved x402 payment traces locally. Free Python tool for LangGraph SQLite. z402 payment privacy is coming soon." />
     <meta name="theme-color" content="#c6ff00" />
     <meta property="og:title" content="Helicopter Humans" />
     <meta property="og:description" content="A privacy layer for your agent. Don't be a helicopter human." />
@@ -21,6 +21,7 @@
       <nav aria-label="Main">
         <ul>
           <li><a href="#redactor">Redactor</a></li>
+          <li><a href="#memory-cleaner">Payment traces</a></li>
           <li><a href="#demo">Demo</a></li>
           <li><a href="#how">How</a></li>
           <li><a href="#pricing">Pricing</a></li>
@@ -115,10 +116,10 @@
           <h1 id="hero-title">A privacy layer for your agent.</h1>
           <p class="lede">Don't be a helicopter human. <mark>Let your agent have a little bit of privacy.</mark></p>
           <div class="actions">
-            <a class="btn btn-primary" href="#redactor">Redact a log now. Free</a>
+            <a class="btn btn-primary" href="#memory-cleaner">Clean payment traces. Free</a>
             <a class="btn" href="#pricing">Meet the relay</a>
           </div>
-          <p class="fineprint">Less hovering. More doing. Start with the free redactor. The relay is coming soon.</p>
+          <p class="fineprint">Less hovering. More doing. Discover saved payment traces, review, clean up. z402 is coming soon.</p>
         </div>
 
         <figure class="window hero-art">
@@ -171,10 +172,32 @@
       <section class="availability" aria-labelledby="avail-title">
         <h2 id="avail-title" class="sr-only">What is live</h2>
         <ul>
-          <li class="pill pill-live"><strong>Free</strong> Offline log tool</li>
+          <li class="pill pill-live"><strong>Free</strong> Payment-trace cleaner</li>
+          <li class="pill"><strong>Free</strong> Offline log tool</li>
           <li class="pill pill-demo"><strong>Demo</strong> classified.exe</li>
           <li class="pill pill-off"><strong>Coming soon</strong> Agent privacy relay</li>
         </ul>
+      </section>
+
+      <section class="section" id="memory-cleaner" aria-labelledby="memory-cleaner-title">
+        <div class="section-head">
+          <h2 id="memory-cleaner-title">Your agent paid. Its diary kept the receipt.</h2>
+          <p>Find possible x402 payment traces in saved agent history. Review the affected threads. Remove the ones you choose, right on your machine.</p>
+          <p><a class="btn btn-primary" href="/memory-cleaner.py" download="memory-cleaner.py">Download payment-trace cleaner</a> <a class="btn" href="/memory-cleaner-guide.txt" download>Read the local guide</a></p>
+        </div>
+        <div class="window">
+          <div class="titlebar"><span>memory-cleaner.py <span class="tag tag-demo">LOCAL CLI</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <div class="cleaner-body">
+            <p><strong>First supported store: LangGraph SQLite.</strong> Python 3.10+. No packages to install, no uploads, no wallet access. Try an invented demo first:</p>
+            <pre><code>python3 memory-cleaner.py demo --db demo.sqlite
+python3 memory-cleaner.py audit --db demo.sqlite --plan audit.json
+python3 memory-cleaner.py clean --db demo.sqlite --plan audit.json --thread thread-0001</code></pre>
+            <p>The last command previews removal. Applying needs a separate confirmation and a stopped agent. Cleanup removes the selected thread's entire saved history and pending writes; other threads stay intact.</p>
+            <p class="fineprint">Matches are possible payment traces, including challenges and failed attempts. They do not prove a payment happened. Local cleanup cannot erase blockchain, provider or backup records.</p>
+          </div>
+        </div>
+        <p class="fineprint">Next flight: z402. Our direction is payment privacy by default, using shielded payment proofs and a privacy transport. <a href="/z402-design.txt">Read the design proposal</a>. The protocol is coming soon; this cleaner handles supported local history today.</p>
+        <p class="fineprint"><a href="https://github.com/water-bear86/helicopter-humans/tree/feat/49th-8-agent-memory-cleaner/tools/memory-cleaner">Inspect the source and tests</a> · <a href="/memory-cleaner-sha256.json">Download checksums</a></p>
       </section>
 
       <section class="section" id="redactor" aria-labelledby="redactor-title">
@@ -267,10 +290,10 @@
         </div>
         <div class="plans">
           <div class="card plan">
-            <h3>Redactor</h3>
+            <h3>Payment-trace cleaner</h3>
             <p class="price">Free</p>
-            <p>Offline excerpt preparation. Custom masking, editable preview and reviewed export. No account or invoice.</p>
-            <a class="btn" href="#redactor">Use it</a>
+            <p>Find possible x402 traces in local LangGraph SQLite history. Review and remove selected threads. No account or invoice.</p>
+            <a class="btn" href="#memory-cleaner">Get the tool</a>
           </div>
           <div class="card plan plan-hot">
             <p class="stamp stamp-small">Founding</p>

@@ -86,8 +86,8 @@ test('checkout is visibly unavailable when not configured and does not navigate'
   await expect(page.locator('#checkout-note')).toBeVisible()
 })
 
-test('availability distinguishes the offline tool and upcoming relay', async ({ page }) => {
-  await expect(page.locator('.pill-live')).toHaveText(/Free\s+Offline log tool/)
+test('availability distinguishes the payment-trace cleaner and upcoming relay', async ({ page }) => {
+  await expect(page.locator('.pill-live')).toHaveText(/Free\s+Payment-trace cleaner/)
   await expect(page.locator('.pill-off')).toHaveText(/Coming soon\s+Agent privacy relay/)
 })
 
@@ -193,7 +193,7 @@ test.describe('wide screens', () => {
 
     // Primary actions still work with the flyer hovering over the hero.
     await page.locator('#top').scrollIntoViewIfNeeded()
-    await page.getByRole('link', { name: 'Redact a log now. Free' }).click()
-    await expect(page).toHaveURL(/#redactor$/)
+    await page.getByRole('link', { name: 'Clean payment traces. Free' }).click()
+    await expect(page).toHaveURL(/#memory-cleaner$/)
   })
 })

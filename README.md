@@ -7,6 +7,8 @@ A privacy layer for your agent. Don't be a helicopter human. Let your agent have
 | Part | State | Where |
 | --- | --- | --- |
 | Offline log tool | Free single-file download. Local text-file input, exact-phrase masking, editable preview, reviewed export and clear. Public page is sample-only | `src/offline.ts`, `src/redact.ts`, `docs/OFFLINE_LOG_TOOL.md` |
+| Payment-trace cleaner | Free local Python CLI. Discover possible x402 markers in a supported LangGraph SQLite store; preview and explicitly remove selected whole threads. No runtime dependencies or network calls | `tools/memory-cleaner/memory_cleaner.py`, `docs/PAYMENT_TRACE_CLEANER.md` |
+| z402 | Design proposal for payment/transport unlinkability by default; no deployed proof/verifier, shielded-credit ledger or rollup | `docs/Z402_DESIGN.md` |
 | classified.exe terminal | Demo with invented text only. Unknown input is not echoed or retained in history | `src/terminal.ts` |
 | Checkout button | Always off. No build variable can open it | `src/main.ts` |
 | Invoice checkout (Founding Agent Pass preorder) | Prototype, collection hard-disabled. Runs only as a local fixture (`CHECKOUT_MODE=fixture`, never on a host). Draft offer, not approved | `src/checkout/`, `api/checkout/`, `checkout.html`, `docs/CHECKOUT.md` |
