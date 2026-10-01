@@ -7,6 +7,6 @@
   "description": "Self-hosted private agent payments with portable Zcash payment disclosures.",
   "engines": { "node": ">=24" },
   "exports": { ".": { "types": "./types/index.d.ts", "default": "./index.js" } },
-  "scripts": { "test": "node --test test/" },
+  "scripts": { "test": "node --test test/*.test.js" },
   "dependencies": { "socks-proxy-agent": "8.0.5" }
 }
