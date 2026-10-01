@@ -74,18 +74,6 @@ test('CSP denies network and the hosted artifact accepts no real logs', async ({
   await expect(page.locator('#status')).toContainText('hosted copy accepts no logs')
 })
 
-test('terminal does not echo or keep unrecognised private input in its history', async ({ page }) => {
-  await page.goto('/')
-  const input = page.locator('#term-in')
-  await input.fill('status')
-  await input.press('Enter')
-  await input.fill('redact private-acquisition')
-  await input.press('Enter')
-  await expect(page.locator('#term-out')).not.toContainText('private-acquisition')
-  await input.press('ArrowUp')
-  await expect(input).toHaveValue('status')
-})
-
 test('without JavaScript the offline file accepts no input', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false })
   try {

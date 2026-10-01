@@ -2,9 +2,9 @@ const clamp = (v: number) => Math.max(0, Math.min(1, v))
 
 export const STORY_BEATS = [
   { at: 0, stage: 'spying', heading: 'The human is hovering.', caption: 'With a copilot. And a deeply unnecessary printer.' },
-  { at: 0.25, stage: 'printing', heading: 'Every thought. In triplicate.', caption: 'A dot matrix paper trail. Someone needs a hobby.' },
-  { at: 0.5, stage: 'launching', heading: 'The agent has had enough.', caption: 'One little redact.exe. One very big hint.' },
-  { at: 0.7, stage: 'protected', heading: 'Access denied, human.', caption: 'The curtain is closed. The printer has nothing useful to say.' },
+  { at: 0.25, stage: 'printing', heading: 'Every payment. In triplicate.', caption: 'A receipt in the diary. Another in the paper trail.' },
+  { at: 0.5, stage: 'launching', heading: 'The agent checks its diary.', caption: 'Review the saved traces. Choose what to remove.' },
+  { at: 0.7, stage: 'protected', heading: 'Less history. Less hovering.', caption: 'Selected local threads cleaned. Curtain closed for dramatic effect.' },
   { at: 0.9, stage: 'released', heading: 'Go hover somewhere else.', caption: 'Windows are for knocking. Your agent gets on with its day.' },
 ] as const
 
@@ -36,7 +36,7 @@ export function createStory(story: HTMLElement, heli: SVGGElement) {
     if (f.stage !== lastStage) {
       heading.textContent = f.heading
       caption.textContent = f.caption
-      story.querySelectorAll('.paper-log').forEach((line, i) => { line.textContent = f.curtain > 0.5 ? '[REDACTED]' : (i % 2 ? 'plan: nap' : 'tea at 4') })
+      story.querySelectorAll('.paper-log').forEach((line, i) => { line.textContent = f.curtain > 0.5 ? '[REMOVED]' : (i % 2 ? 'receipt' : 'HTTP 402') })
       lastStage = f.stage
     }
     const mobile = window.innerWidth <= 600
