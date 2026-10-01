@@ -1,67 +1,87 @@
 import { describe, expect, it } from 'vitest'
-import { FLYER_BOX, HELI_CENTER, MIN_GUTTER, flightPose, laneWidth, sceneOffset, type Metrics } from './flight'
+import { advanceFlyer, crossingHeight, freePosition, overlaps, type FlightWorld, type FlyerState } from './roam'
+import { storyFrame } from './story'
 
-function metrics(vw: number, vh: number, gutter: number): Metrics {
-  return { vw, vh, gutter, art: { left: vw / 2, top: 360, k: 1.3 }, span: 640 }
-}
+const world: FlightWorld = { width: 1440, height: 900, rx: 80, ry: 48, obstacles: [] }
+const initial: FlyerState = { x: 1300, y: 110, vx: -180, vy: 65, bumps: 0 }
 
-describe('flightPose', () => {
-  it('starts exactly on the helicopter in the bedroom scene', () => {
-    const m = metrics(1440, 900, 150)
-    const { pose, caption } = flightPose(0, m)
-    expect(pose).toEqual({ cx: m.art.left + HELI_CENTER.x * m.art.k, cy: m.art.top + HELI_CENTER.y * m.art.k, k: m.art.k, r: 0 })
-    expect(caption).toEqual({ x: 200, y: 118, size: 12, chip: 0 })
-  })
-
-  it('retraces the same pose when scrolling back', () => {
-    const m = metrics(1440, 900, 150)
-    const there = flightPose(1234, m)
-    flightPose(4000, m)
-    expect(flightPose(1234, m)).toEqual(there)
-  })
-
-  it('keeps the helicopter and its caption inside the gutter and viewport once clear of the scene', () => {
-    for (const [vw, vh] of [[1440, 900], [1920, 1080], [2560, 1440], [1366, 600]]) {
-      for (const gutter of [MIN_GUTTER, 150, 320]) {
-        const m = metrics(vw, vh, gutter)
-        for (let y = m.span; y < 20000; y += 37) {
-          const { pose, caption } = flightPose(y, m)
-          // Rotation slack: a 7 degree bank moves the far corners by at most ~15 units.
-          const slack = 15 * pose.k
-          const heliLeft = pose.cx - 90 * pose.k - slack
-          const heliRight = pose.cx + 112 * pose.k + slack
-          const captionHalf = (caption.size * 8.6 * pose.k) / 2
-          const captionCx = pose.cx + (caption.x - HELI_CENTER.x) * pose.k
-          const captionBottom = pose.cy + (caption.y - HELI_CENTER.y + caption.size * 0.4) * pose.k
-          expect(Math.min(heliLeft, captionCx - captionHalf)).toBeGreaterThanOrEqual(vw - gutter)
-          expect(Math.max(heliRight, captionCx + captionHalf)).toBeLessThanOrEqual(vw)
-          expect(pose.cy - 46 * pose.k - slack).toBeGreaterThanOrEqual(0)
-          expect(captionBottom + slack).toBeLessThanOrEqual(vh)
-          expect(caption.size * pose.k).toBeGreaterThanOrEqual(10)
-        }
-      }
+describe('free flight', () => {
+  it('crosses both sides of the screen and reverses facing at its edges', () => {
+    let s = initial
+    let left = s.x, right = s.x
+    const directions = new Set()
+    for (let i=0; i<1800; i++) {
+      s = advanceFlyer(s, 1/60, world)!
+      directions.add(Math.sign(s.vx))
+      left = Math.min(left, s.x); right = Math.max(right, s.x)
+      expect(s.x - world.rx).toBeGreaterThanOrEqual(8)
+      expect(s.x + world.rx).toBeLessThanOrEqual(world.width - 8)
+      expect(s.y - world.ry).toBeGreaterThanOrEqual(8)
+      expect(s.y + world.ry).toBeLessThanOrEqual(world.height - 8)
     }
+    expect(right-left).toBeGreaterThan(1200)
+    expect(directions.size).toBe(2)
   })
 
-  it('fits the flyer within the lane width', () => {
-    expect(laneWidth(MIN_GUTTER)).toBeGreaterThan(0)
-    expect(laneWidth(1000)).toBeLessThanOrEqual(FLYER_BOX.w)
+  it('bops a window border without entering the window, even at high speed', () => {
+    const w = { ...world, obstacles: [{ left: 400, right: 1100, top: 200, bottom: 700 }] }
+    let s = { ...initial, x: 1230, y: 400, vx: -700, vy: 0 }
+    for(let i=0; i<120; i++) {
+      s = advanceFlyer(s, .064, w)!
+      expect(overlaps(s.x, s.y, w.obstacles[0], w.rx, w.ry)).toBe(false)
+    }
+    expect(s.bumps).toBeGreaterThan(0)
+  })
+
+  it('does not tunnel through a thin border', () => {
+    const w = { ...world, obstacles: [{ left: 710, right: 714, top: 0, bottom: 900 }] }
+    let s = { ...initial, x: 500, y: 400, vx: 1200, vy: 0 }
+    for(let i=0; i<60; i++) {
+      s = advanceFlyer(s, .04, w)!
+      expect(s.x + w.rx).toBeLessThanOrEqual(710)
+    }
+    expect(s.bumps).toBeGreaterThan(0)
+  })
+
+  it('relocates safely if scrolling moves a window over the flyer', () => {
+    const w = { ...world, obstacles: [{ left: 100, right: 1340, top: 150, bottom: 750 }] }
+    const next = advanceFlyer({ ...initial, x: 500, y: 400 }, 0, w)!
+    expect(next).not.toBeNull()
+    expect(overlaps(next.x, next.y, w.obstacles[0], w.rx, w.ry)).toBe(false)
+  })
+
+  it('hides gracefully when a crowded phone viewport offers no safe space', () => {
+    const w = { width: 390, height: 844, rx: 56, ry: 35, obstacles: [{ left: 16, right: 374, top: 0, bottom: 844 }] }
+    expect(freePosition(300, 200, w)).toBeNull()
+    expect(advanceFlyer(initial, .04, w)).toBeNull()
+  })
+
+  it('finds a clear crossing above a window and refuses a passage through it', () => {
+    const w = { ...world, obstacles: [{ left: 100, right: 1300, top: 250, bottom: 900 }] }
+    const y = crossingHeight(w, 400)!
+    expect(y + w.ry).toBeLessThan(250)
+    expect(crossingHeight({ ...w, obstacles: [{ left: 100, right: 1300, top: 0, bottom: 900 }] }, 400)).toBeNull()
+  })
+
+  it('can recover into a newly available gap after scroll or resize', () => {
+    const w = { width: 390, height: 844, rx: 56, ry: 35, obstacles: [{ left: 16, right: 374, top: 170, bottom: 844 }] }
+    const next = advanceFlyer(initial, 0, w)!
+    expect(next.y + w.ry).toBeLessThanOrEqual(170)
   })
 })
 
-describe('sceneOffset', () => {
-  it('rests at home at the top of the page', () => {
-    expect(sceneOffset(0, 0)).toEqual({ dx: 0, dy: 0, r: 0 })
+describe('scroll story', () => {
+  it('moves from spying through printing and software launch to a closed curtain and release', () => {
+    expect([0, .3, .55, .8, 1].map(p => storyFrame(p).stage)).toEqual(['spying','printing','launching','protected','released'])
+    expect(storyFrame(.3).curtain).toBe(0)
+    expect(storyFrame(.8).curtain).toBe(1)
+    expect(storyFrame(1).retreat).toBeCloseTo(1)
   })
-
-  it('keeps the helicopter and caption inside the 400x320 scene', () => {
-    for (let u = 0; u <= 1; u += 0.01) {
-      for (const y of [0, 70, 140, 211]) {
-        const { dx, dy } = sceneOffset(u, y)
-        expect(30 + dx).toBeGreaterThanOrEqual(0)
-        expect(254 + dx).toBeLessThanOrEqual(400) // caption's right edge
-        expect(24 + dy).toBeGreaterThanOrEqual(0)
-      }
-    }
+  it('can rewind with scrolling and clamps deep links outside the story', () => {
+    expect(storyFrame(-4)).toEqual(storyFrame(0))
+    expect(storyFrame(2)).toEqual(storyFrame(1))
+    const before = storyFrame(.3)
+    storyFrame(.9)
+    expect(storyFrame(.3)).toEqual(before)
   })
 })

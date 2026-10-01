@@ -3,9 +3,13 @@
 //   GET  /api/invoices/{id}  public; carries integer `price_zatoshis` and `received_zatoshis`.
 // Knows nothing about orders. It returns parsed provider data or a classified failure, and never
 // retries: whether a failure is safe to retry is the order service's decision.
-import { looksLikeUnifiedAddress } from './address.js'
+import { looksLikeUnifiedAddress, type ZcashNetwork } from './address.js'
 
 export const CIPHERPAY_ORIGIN = 'https://api.cipherpay.app'
+// CipherPay's hosted testnet sandbox (docs/sandbox, docs/api-ref), a separate server with separate
+// merchant accounts and keys. Same invoice handlers and response shape; addresses are `utest1`.
+export const CIPHERPAY_TESTNET_ORIGIN = 'https://api.testnet.cipherpay.app'
+const ORIGINS: Record<ZcashNetwork, string> = { mainnet: CIPHERPAY_ORIGIN, testnet: CIPHERPAY_TESTNET_ORIGIN }
 
 export interface CreateInvoiceRequest {
   productName: string
@@ -71,6 +75,8 @@ export interface CipherPayClientOptions {
   maxResponseBytes?: number
   // Local fixtures only: permit an http loopback origin.
   allowLoopback?: boolean
+  // Selects the one pinned origin and the address prefix. There is no fallback between networks.
+  network?: ZcashNetwork
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
@@ -85,18 +91,24 @@ export function isProviderInvoiceId(value: unknown): value is string {
   return typeof value === 'string' && UUID.test(value)
 }
 
-export function checkProviderOrigin(origin: string, allowLoopback = false): string {
+export function checkProviderOrigin(origin: string, allowLoopback = false, network: ZcashNetwork = 'mainnet'): string {
   const url = new URL(origin)
-  if (url.origin === CIPHERPAY_ORIGIN && url.pathname === '/' && !url.search) return CIPHERPAY_ORIGIN
+  const pinned = ORIGINS[network]
+  if (url.origin === pinned && url.pathname === '/' && !url.search && !url.username && !url.password) return pinned
   if (allowLoopback && url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) return url.origin
   throw new Error('provider origin is not the pinned CipherPay API')
 }
 
-class BodyTooLarge extends Error {}
+export class BodyTooLarge extends Error {}
 
-async function readBounded(response: Response, maxBytes: number): Promise<string> {
+// Reads at most `maxBytes`: refuses a larger declared length up front and cancels a stream that runs
+// past the limit, so an oversized body is never read in full.
+export async function readBounded(response: Response, maxBytes: number): Promise<string> {
   const declared = Number(response.headers.get('content-length'))
-  if (Number.isFinite(declared) && declared > maxBytes) throw new BodyTooLarge()
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await response.body?.cancel().catch(() => undefined)
+    throw new BodyTooLarge()
+  }
   if (!response.body) return ''
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
@@ -138,11 +150,11 @@ const isPositiveFinite = (v: unknown): v is number => typeof v === 'number' && N
 const isTimestamp = (v: unknown): v is string => typeof v === 'string' && TIMESTAMP.test(v) && Number.isFinite(Date.parse(v))
 const isZatoshis = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
 
-export function parseCreated(body: Record<string, unknown>): CreatedInvoice | undefined {
+export function parseCreated(body: Record<string, unknown>, network: ZcashNetwork = 'mainnet'): CreatedInvoice | undefined {
   const b = body
   if (!isProviderInvoiceId(b.invoice_id) || typeof b.memo_code !== 'string' || !MEMO.test(b.memo_code)) return undefined
   if (!isPositiveFinite(b.amount) || !isString(b.currency, 10) || !isPositiveFinite(b.price_zec)) return undefined
-  if (!looksLikeUnifiedAddress(b.payment_address) || !isString(b.zcash_uri, 2048) || !isTimestamp(b.expires_at)) return undefined
+  if (!looksLikeUnifiedAddress(b.payment_address, network) || !isString(b.zcash_uri, 2048) || !isTimestamp(b.expires_at)) return undefined
   return {
     invoiceId: b.invoice_id,
     memoCode: b.memo_code,
@@ -155,11 +167,11 @@ export function parseCreated(body: Record<string, unknown>): CreatedInvoice | un
   }
 }
 
-export function parseInvoice(body: Record<string, unknown>): ProviderInvoice | undefined {
+export function parseInvoice(body: Record<string, unknown>, network: ZcashNetwork = 'mainnet'): ProviderInvoice | undefined {
   const b = body
   if (!isProviderInvoiceId(b.id) || typeof b.memo_code !== 'string' || !MEMO.test(b.memo_code) || !isString(b.status, 32)) return undefined
   if (!isPositiveFinite(b.price_zec) || !isZatoshis(b.price_zatoshis) || b.price_zatoshis === 0 || !isZatoshis(b.received_zatoshis)) return undefined
-  if (!looksLikeUnifiedAddress(b.payment_address) || !isString(b.zcash_uri, 2048) || !isTimestamp(b.expires_at)) return undefined
+  if (!looksLikeUnifiedAddress(b.payment_address, network) || !isString(b.zcash_uri, 2048) || !isTimestamp(b.expires_at)) return undefined
   if (b.amount !== null && b.amount !== undefined && !isPositiveFinite(b.amount)) return undefined
   if (b.currency !== null && b.currency !== undefined && !isString(b.currency, 10)) return undefined
   if (b.detected_txid !== null && b.detected_txid !== undefined && !(typeof b.detected_txid === 'string' && TXID.test(b.detected_txid))) return undefined
@@ -183,7 +195,8 @@ export function parseInvoice(body: Record<string, unknown>): ProviderInvoice | u
 }
 
 export function createCipherPayClient(options: CipherPayClientOptions): InvoiceProvider {
-  const origin = checkProviderOrigin(options.origin, options.allowLoopback)
+  const network = options.network ?? 'mainnet'
+  const origin = checkProviderOrigin(options.origin, options.allowLoopback, network)
   if (!isString(options.apiKey, 512)) throw new Error('CipherPay API key is required')
   const doFetch = options.fetch ?? fetch
   const timeoutMs = options.timeoutMs ?? 8000
@@ -222,7 +235,7 @@ export function createCipherPayClient(options: CipherPayClientOptions): InvoiceP
       // arrive after the invoice was created, so every other status is unknown.
       if (REJECTED_BEFORE_CREATE.has(res.status)) return { kind: 'rejected', httpStatus: res.status }
       if (res.status !== 201) return { kind: 'unknown', reason: `http_${res.status}` }
-      const invoice = res.body && parseCreated(res.body)
+      const invoice = res.body && parseCreated(res.body, network)
       return invoice ? { kind: 'created', invoice } : { kind: 'unknown', reason: 'malformed_response' }
     },
 
@@ -236,7 +249,7 @@ export function createCipherPayClient(options: CipherPayClientOptions): InvoiceP
       }
       if (res.status === 404) return { kind: 'not_found' }
       if (res.status !== 200) return { kind: 'unavailable', reason: `http_${res.status}` }
-      const invoice = res.body && parseInvoice(res.body)
+      const invoice = res.body && parseInvoice(res.body, network)
       return invoice ? { kind: 'ok', invoice } : { kind: 'unavailable', reason: 'malformed_response' }
     },
   }

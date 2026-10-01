@@ -13,6 +13,8 @@ const [order, orders, status, quote] = await Promise.all([
   load('pay/quote.func/api/pay/quote.js'),
 ])
 assert.ok(existsSync(`${FN}/checkout/order.func/node_modules/pg`), 'pg must be traced into the checkout function')
+// The agent relay is a local prototype: no deployment may emit a function for it.
+assert.ok(!existsSync(`${FN}/relay`) && !existsSync(`${FN}/relay.func`), 'no relay function may be deployed')
 
 const outbound = []
 globalThis.fetch = async (url) => {
@@ -64,6 +66,11 @@ for (const mode of ['live', 'fixture']) {
     mode: 'disabled',
     collecting: false,
     blockers: ['offer_not_approved', 'merchant_fee_config_unverified', 'durable_store_not_deployed', 'no_confirmed_payer', 'no_authorized_mainnet_e2e'],
+  })
+  assert.deepEqual(s.relay, {
+    mode: 'unavailable',
+    hosted: false,
+    blockers: ['no_authenticated_entitlement', 'no_credit_accounting', 'no_hosted_rate_limit', 'hosted_deployment_unreviewed'],
   })
   console.log(`production, CHECKOUT_MODE=${mode}: all checkout and pay routes 503, status disabled`)
 }

@@ -82,7 +82,7 @@ A multi-payment invoice is legitimate: each txid the provider reports is claimed
 - The credential travels only in `Authorization: Bearer`, never in a URL, cookie, body or storage. The page keeps it in memory. The browser never attaches it on its own, and state-changing requests must also be same-origin JSON (`Origin` equals the request origin, `Sec-Fetch-Site` not cross-site).
 - Responses send `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff`. The page sets `<meta name="referrer" content="no-referrer">` and `noindex`.
 - Unknown and malformed codes both return 404 `order_not_found`. Provider invoice ids, memo codes and txids are public metadata and are never accepted as authority.
-- The provider origin is pinned to `https://api.cipherpay.app`. Only the fixture may use an http loopback origin. Requests use `redirect: "error"`, an 8 s timeout and a 32 KiB response cap. Invoice ids are checked as UUIDs before they are placed in a path.
+- The provider origin is pinned to `https://api.cipherpay.app`. Only the fixture may use an http loopback origin. The operator-run testnet harness (`docs/SANDBOX_TEST.md`) selects `network: 'testnet'`, which pins `https://api.testnet.cipherpay.app` and `utest1` addresses instead; there is no fallback between networks, and the routes always use mainnet. Requests use `redirect: "error"`, an 8 s timeout and a 32 KiB response cap. Invoice ids are checked as UUIDs before they are placed in a path.
 - Nothing logs request data, codes or provider responses.
 - Rate limiting is not implemented. Add it at the edge before enabling.
 
