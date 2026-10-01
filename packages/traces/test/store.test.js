@@ -83,14 +83,17 @@ test('prepared receipt still checks a committed operation after interrupted rece
   edit(path, db => db.prepare('UPDATE checkpoints SET metadata=?').run(Buffer.from('changed')))
   assert.equal(recover(path, result.receiptPath), 'changed-since-operation')
 })
-test('file replacement immediately before commit is refused and both-table deletion rolls back', t => {
+test('attempted file replacement before commit is refused by identity or OS lock; both tables roll back', t => {
   const { path, dir } = fixture(t), plan = preview(path), before = logical(path), original = join(dir, 'original.sqlite')
+  let renamed = false
   assert.throws(() => removeSelected(plan, [selected(plan)], { beforeCommit() {
     renameSync(path, original)
+    renamed = true
     copyFileSync(original, path)
-  } }), /file changed/)
-  rmSync(path)
-  renameSync(original, path)
+  } }), /file changed|No uncommitted removal was kept/)
+  // Windows refuses renaming an open SQLite file; POSIX permits it and reaches
+  // the identity guard. In both cases, the pending deletes must roll back.
+  if (renamed) { rmSync(path); renameSync(original, path) }
   assert.deepEqual(logical(path), before)
 })
 for (const [name, sql] of Object.entries({ table: 'CREATE TABLE unrelated(secret TEXT)', trigger: 'CREATE TRIGGER trap AFTER DELETE ON checkpoints BEGIN DELETE FROM writes; END', index: 'CREATE INDEX extra ON checkpoints(thread_id)' })) {
@@ -116,12 +119,13 @@ test('missing stores are never created', t => {
 test('writer lock is actionable; WAL preview succeeds and removal fails without deleting', t => {
   const { path } = fixture(t)
   const db = new DatabaseSync(path)
-  t.after(() => db.close())
-  db.exec('PRAGMA journal_mode=WAL; BEGIN IMMEDIATE')
-  const plan = preview(path)
-  assert.throws(() => removeSelected(plan, [selected(plan)]), /locked/)
-  db.exec('ROLLBACK')
-  assert.equal(summary(preview(path)).length, 2)
+  try {
+    db.exec('PRAGMA journal_mode=WAL; BEGIN IMMEDIATE')
+    const plan = preview(path)
+    assert.throws(() => removeSelected(plan, [selected(plan)]), /locked/)
+    db.exec('ROLLBACK')
+    assert.equal(summary(preview(path)).length, 2)
+  } finally { db.close() }
 })
 test('oversized values refused without mutation', t => {
   const { path } = fixture(t)
