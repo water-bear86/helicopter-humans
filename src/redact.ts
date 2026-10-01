@@ -39,12 +39,15 @@ export const RULES: Rule[] = [
     pattern:
       /\b(?:sk-(?:ant-|proj-)?[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,})\b/g,
   },
+  { label: 'HEADER', pattern: /\b((?:Authorization|Cookie|Set-Cookie)[ \t]*:[ \t]*)[^\r\n]+/gi, replace: (_m, prefix) => `${prefix}[HEADER]` },
   { label: 'BEARER', pattern: /\b(Bearer\s+)[A-Za-z0-9._~+/-]{12,}=*/g, replace: (_m, prefix) => `${prefix}[BEARER]` },
+  { label: 'URL_CREDENTIAL', pattern: /(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, replace: (_m, prefix) => `${prefix}[URL_CREDENTIAL]@` },
   {
     label: 'SECRET',
-    // key=value / key: value where the key name smells secret.
-    pattern: /\b((?:api[_-]?key|secret|token|password|passwd|pwd|auth)[A-Za-z0-9_-]*\s*[:=]\s*["']?)(?!Bearer\b)([^\s"',;[][^\s"',;]{5,})/gi,
-    replace: (_m, prefix) => `${prefix}[SECRET]`,
+    // Include prefixed names, quoted JSON keys/values, escapes and short credentials.
+    pattern: /\b([A-Za-z0-9_-]*(?:api[_-]?key|secret|token|password|passwd|pwd|auth|cookie)[A-Za-z0-9_-]*["']?\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"',;}\][&]+)/gi,
+    accept: match => !/[:=]\s*["']?\[[A-Z_]+\]["']?$/.test(match),
+    replace: (_m, prefix, value) => `${prefix}${value.startsWith('"') ? '"[SECRET]"' : value.startsWith("'") ? "'[SECRET]'" : '[SECRET]'}`,
   },
   { label: 'EVM_PRIVATE_KEY', pattern: /\b0x[a-fA-F0-9]{64}\b/g },
   { label: 'EVM_ADDRESS', pattern: /\b0x[a-fA-F0-9]{40}\b/g },
@@ -61,13 +64,23 @@ export const RULES: Rule[] = [
     pattern: /(\/(?:Users|home)\/)[^/\s]+/g,
     replace: (_m, prefix) => `${prefix}[USER]`,
   },
+  { label: 'WINDOWS_USER', pattern: /([A-Za-z]:\\Users\\)[^\\\s]+/gi, replace: (_m, prefix) => `${prefix}[USER]` },
   // Base58 run typical of Solana/Bitcoin addresses. Runs after hex rules.
   { label: 'BASE58_ADDRESS', pattern: /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g, accept: (m) => /\d/.test(m) && /[A-Z]/.test(m) && /[a-z]/.test(m) },
 ]
 
-export function redact(input: string, rules: Rule[] = RULES): RedactionResult {
+export function redact(input: string, rules: Rule[] = RULES, literals: string[] = []): RedactionResult {
   const counts: Record<string, number> = {}
   let text = input
+  const terms = [...new Set(literals.filter(Boolean))].sort((a, b) => b.length - a.length)
+  if (terms.length) {
+    // One pass prevents replacements being mistaken for another custom term.
+    const pattern = new RegExp(terms.map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g')
+    text = text.replace(pattern, () => {
+      counts.CUSTOM = (counts.CUSTOM ?? 0) + 1
+      return '[CUSTOM]'
+    })
+  }
   for (const rule of rules) {
     text = text.replace(rule.pattern, (match: string, ...rest: unknown[]) => {
       if (rule.accept && !rule.accept(match)) return match

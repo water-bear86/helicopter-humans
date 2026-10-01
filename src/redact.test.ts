@@ -18,7 +18,7 @@ describe('redact', () => {
     expect(text).not.toContain('10.0.0.12')
     expect(text).not.toContain('sk-proj-')
     expect(text).not.toContain('ghp_')
-    expect(text).toContain('Bearer [BEARER]')
+    expect(text).toContain('Authorization: [HEADER]')
     expect(text).toContain('[EVM_ADDRESS]')
     expect(text).toContain('[EVM_PRIVATE_KEY]')
     expect(text).toContain('/Users/[USER]/secret-project')
@@ -42,5 +42,31 @@ describe('redact', () => {
 
   it('counts every replacement', () => {
     expect(redact('a@b.co c@d.io').total).toBe(2)
+  })
+
+  it('masks quoted JSON credentials, short values and prefixed environment keys', () => {
+    const input = [String.raw`{"password":"a\"b","access_token":"x","cookie":"session=ab"}`, 'OPENAI_API_KEY=q', 'pwd: 12'].join('\n')
+    const result = redact(input)
+    expect(result.text).toBe('{"password":"[SECRET]","access_token":"[SECRET]","cookie":"[SECRET]"}\nOPENAI_API_KEY=[SECRET]\npwd: [SECRET]')
+    expect(result.total).toBe(5)
+  })
+
+  it('removes Basic authentication, cookies and URL userinfo', () => {
+    const input = 'Authorization: Basic ZGVtbzpwYXNz\nCookie: session=demo; private=123\nGET https://alice:short@internal.example/path'
+    expect(redact(input).text).toBe('Authorization: [HEADER]\nCookie: [HEADER]\nGET https://[URL_CREDENTIAL]@internal.example/path')
+  })
+
+  it('masks Windows usernames without dropping useful file context', () => {
+    expect(redact('C:\\Users\\Ada\\project\\trace.log').text).toBe('C:\\Users\\[USER]\\project\\trace.log')
+  })
+
+  it('supports literal overlapping phrases without treating them as regular expressions', () => {
+    const result = redact('Ada Lovelace met Ada at project[a]. Ada Lovelace', undefined, ['Ada', 'Ada Lovelace', 'project[a]', 'CUSTOM'])
+    expect(result.text).toBe('[CUSTOM] met [CUSTOM] at [CUSTOM]. [CUSTOM]')
+    expect(result.counts.CUSTOM).toBe(4)
+  })
+
+  it('leaves unlisted private prose visible rather than calling it protected', () => {
+    expect(redact('The confidential acquisition is on Friday.').total).toBe(0)
   })
 })
