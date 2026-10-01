@@ -1127,5 +1127,11 @@ textarea {
   }
 }
 .cleaner-body { padding: 1.25rem; }
+.start-command { padding: 1rem; background: var(--ink); color: var(--acid); border: 3px solid var(--ink); }
+.command-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: .75rem; }
+.command-actions [role='status'] { font-size: .85rem; }
+.advanced-tool { margin-top: 1rem; font-size: .85rem; }
+.advanced-tool summary { cursor: pointer; font-weight: 700; }
+.advanced-tool p { margin-top: .75rem; }
 .cleaner-body pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; line-height: 1.6; }
 .cleaner-body p + pre, .cleaner-body pre + p, .cleaner-body p + p { margin-top: 1rem; }

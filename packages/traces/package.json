@@ -1,0 +1,15 @@
+{
+  "name": "helicopter-humans-traces",
+  "version": "0.1.0",
+  "description": "Guided local discovery and confirmed whole-thread cleanup of saved x402 payment traces.",
+  "type": "module",
+  "bin": { "hh-traces": "bin/hh-traces.js" },
+  "files": ["bin/", "lib/", "README.md", "LICENSE"],
+  "engines": { "node": ">=24.0.0" },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/water-bear86/helicopter-humans.git", "directory": "packages/traces" },
+  "homepage": "https://helicopter-humans.vercel.app/#start",
+  "bugs": { "url": "https://github.com/water-bear86/helicopter-humans/issues" },
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
+  "scripts": { "test": "node --test test/*.test.js" }
+}

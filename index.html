@@ -4,10 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Helicopter Humans | Find and clean up saved payment traces</title>
-    <meta name="description" content="Don't be a helicopter human. Find and clean up saved x402 payment traces locally. Free Python tool for LangGraph SQLite. z402 payment privacy is coming soon." />
+    <meta name="description" content="Don't be a helicopter human. One guided command to find saved x402 payment traces locally. Preview first, choose threads, confirm cleanup. Free Node tool for LangGraph SQLite." />
     <meta name="theme-color" content="#c6ff00" />
     <meta property="og:title" content="Helicopter Humans" />
-    <meta property="og:description" content="Find and clean up saved x402 payment traces locally. Free Python tool for LangGraph SQLite." />
+    <meta property="og:description" content="One guided command to find saved x402 payment traces locally. Preview first, choose threads, confirm cleanup. Free Node tool for LangGraph SQLite." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
@@ -20,7 +20,7 @@
       </a>
       <nav aria-label="Main">
         <ul>
-          <li><a href="#memory-cleaner">Payment traces</a></li>
+          <li><a href="#start">Start here</a></li>
           <li><a href="#how">How</a></li>
           <li><a href="#z402">z402</a></li>
           <li><a href="#faq">FAQ</a></li>
@@ -114,7 +114,7 @@
           <h1 id="hero-title">Your agent paid. It left a trace.</h1>
           <p class="lede">Don't be a helicopter human. <mark>Let your agent have a little bit of privacy.</mark></p>
           <div class="actions">
-            <a class="btn btn-primary" href="#memory-cleaner">Clean payment traces. Free</a>
+            <a class="btn btn-primary" href="#start">Start local discovery. Free</a>
             <a class="btn" href="#z402">Next flight: z402</a>
           </div>
           <p class="fineprint">Free. Local. Inspectable. Discover saved x402 traces in LangGraph SQLite, then choose which threads to remove.</p>
@@ -175,25 +175,29 @@
         </ul>
       </section>
 
-      <section class="section" id="memory-cleaner" aria-labelledby="memory-cleaner-title">
+      <section class="section" id="start" aria-labelledby="memory-cleaner-title">
+        <span id="memory-cleaner" aria-hidden="true"></span>
         <div class="section-head">
           <h2 id="memory-cleaner-title">Find the receipts. Choose what stays.</h2>
           <p>Find possible x402 payment traces in saved agent history. Review the affected threads. Remove the ones you choose, right on your machine.</p>
-          <p><a class="btn btn-primary" href="/memory-cleaner.py" download="memory-cleaner.py">Download payment-trace cleaner</a> <a class="btn" href="/memory-cleaner-guide.txt" download>Read the local guide</a></p>
         </div>
         <div class="window">
-          <div class="titlebar"><span>memory-cleaner.py <span class="tag tag-demo">LOCAL CLI</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          <div class="titlebar"><span>hh-traces 0.1.0 <span class="tag tag-demo">GUIDED LOCAL TOOL</span></span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
           <div class="cleaner-body">
-            <p><strong>First supported store: LangGraph SQLite.</strong> Python 3.10+. No packages to install, no uploads, no wallet access. Try an invented demo first:</p>
-            <pre><code>python3 memory-cleaner.py demo --db demo.sqlite
-python3 memory-cleaner.py audit --db demo.sqlite --plan audit.json
-python3 memory-cleaner.py clean --db demo.sqlite --plan audit.json --thread thread-0001</code></pre>
-            <p>The last command previews removal. Applying needs a separate confirmation and a stopped agent. Cleanup removes the selected thread's entire saved history and pending writes; other threads stay intact.</p>
+            <p><strong>One command. A guided preview.</strong> Paste this into your terminal. It helps you choose a supported history file, then shows possible traces before changing anything.</p>
+            <pre class="start-command"><code id="start-command">npx --yes https://helicopter-humans.vercel.app/helicopter-humans-traces-0.1.0.tgz</code></pre>
+            <div class="command-actions"><button class="btn btn-primary" id="copy-command" type="button">Copy start command</button><span id="copy-status" role="status" aria-live="polite"></span></div>
+            <p><strong>Need Node?</strong> Install <a href="https://nodejs.org/en/download" target="_blank" rel="noopener noreferrer">Node.js 24 or newer</a>, open Terminal on Mac/Linux or PowerShell on Windows, then paste the command. No Python or extra packages to arrange.</p>
+            <p><strong>No history found?</strong> Choose the clearly labeled invented demo. You can also enter your agent app's history path. The tool checks a few conventional filenames; it never searches your whole machine.</p>
+            <p><strong>First supported store: LangGraph SQLite.</strong> No account, wallet, payment, telemetry or history upload. npm downloads the tool; your saved history stays local.</p>
+            <p>Choose the threads, review the impact, stop the agent and explicitly confirm. Cleanup removes the selected thread's <strong>entire saved history and pending writes</strong>; other threads stay intact. Enter or cancellation removes nothing.</p>
             <p class="fineprint">Matches are possible payment traces, including challenges and failed attempts. They do not prove a payment happened. Local cleanup cannot erase blockchain, provider or backup records.</p>
+            <p><a href="/traces-guide.txt">Read the local guide</a> · <a href="/traces-sha256.json">Package checksums</a></p>
           </div>
         </div>
         <p class="fineprint">Next flight: z402. Our direction is payment privacy by default, using shielded payment proofs and a privacy transport. <a href="/z402-design.txt">Read the design proposal</a>. The protocol is coming soon; this cleaner handles supported local history today.</p>
-        <p class="fineprint"><a href="https://github.com/water-bear86/helicopter-humans/tree/feat/49th-8-agent-memory-cleaner/tools/memory-cleaner">Inspect the source and tests</a> · <a href="/memory-cleaner-sha256.json">Download checksums</a></p>
+        <p class="fineprint"><a href="https://github.com/water-bear86/helicopter-humans/tree/feat/49th-8-agent-memory-cleaner/packages/traces">Inspect the package source and tests</a></p>
+        <details class="advanced-tool"><summary>Advanced downloads</summary><p><a href="/helicopter-humans-traces-0.1.0.tgz" download>Download the npm package archive</a> · <a href="/memory-cleaner.py" download="memory-cleaner.py">Python script</a> · <a href="/memory-cleaner-guide.txt">Python guide</a></p></details>
       </section>
 
       <section class="section" id="how" aria-labelledby="how-title">
@@ -204,7 +208,7 @@ python3 memory-cleaner.py clean --db demo.sqlite --plan audit.json --thread thre
           <li class="card">
             <span class="step-no">01</span>
             <h3>Discover the traces</h3>
-            <p>Download the Python script. Try the invented demo, then audit a supported local LangGraph SQLite store. The report identifies affected threads without printing stored secrets.</p>
+            <p>Run the start command. Choose a supported local LangGraph history file, or explore the clearly invented demo. The preview shows candidate matches without printing saved secrets.</p>
           </li>
           <li class="card">
             <span class="step-no">02</span>
@@ -214,7 +218,7 @@ python3 memory-cleaner.py clean --db demo.sqlite --plan audit.json --thread thre
           <li class="card">
             <span class="step-no">03</span>
             <h3>Confirm. Then clean.</h3>
-            <p>Stop the agent, explicitly confirm the selection and apply the plan. Other threads stay intact. Run the audit again to check the supported store.</p>
+            <p>Stop the agent, confirm the impact and type the requested confirmation. Other threads stay intact. Cancellation and an empty selection remove nothing.</p>
           </li>
         </ol>
       </section>
@@ -239,7 +243,7 @@ python3 memory-cleaner.py clean --db demo.sqlite --plan audit.json --thread thre
         <div class="faq">
           <details>
             <summary>What can I scan?</summary>
-            <p>The first supported store is a local LangGraph SQLite checkpoint database, using the SqliteSaver 3.1.1 layout. The Python 3.10+ script checks saved checkpoints and pending writes for possible x402 payment markers. Follow the guide and stop your agent before applying cleanup.</p>
+            <p>The first supported store is local LangGraph SQLite history using the SqliteSaver 3.1.1 layout. The Node.js 24+ package checks saved checkpoints and pending writes for possible x402 payment markers. Other agent stores are not supported yet. If no history is found, choose the invented demo or enter your app's configured history path.</p>
           </details>
           <details>
             <summary>Does it remove just the receipt?</summary>
@@ -255,7 +259,7 @@ python3 memory-cleaner.py clean --db demo.sqlite --plan audit.json --thread thre
           </details>
           <details>
             <summary>Do you track me?</summary>
-            <p>The cleaner runs on your machine with no uploads or telemetry. This site loads no analytics, third-party scripts or web fonts. Our hosting provider sees ordinary website request logs.</p>
+            <p>The cleaner runs on your machine with no history uploads or telemetry. npm downloads the package before it runs; downloading does not approve removal. This site loads no analytics, third-party scripts or web fonts. Our hosting provider sees ordinary website and download request logs.</p>
           </details>
           <details>
             <summary>Is this a joke?</summary>

@@ -8,9 +8,9 @@ test('the landing page leads to payment discovery and its guide', async ({ page 
   await expect(page).toHaveTitle('Helicopter Humans | Find and clean up saved payment traces')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your agent paid. It left a trace.')
   await page.getByRole('link', { name: 'Skip to the good stuff' }).click()
-  await page.getByRole('link', { name: 'Clean payment traces. Free' }).click()
-  await expect(page).toHaveURL(/#memory-cleaner$/)
-  await expect(page.getByRole('link', { name: 'Download payment-trace cleaner' })).toBeVisible()
+  await page.getByRole('link', { name: 'Start local discovery. Free' }).click()
+  await expect(page).toHaveURL(/#start$/)
+  await expect(page.getByRole('button', { name: 'Copy start command' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Read the local guide' })).toBeVisible()
   await expect(page.locator('#how')).toContainText('entire saved history and pending writes')
 })
@@ -142,7 +142,7 @@ test.describe('wide screens', () => {
     })
     expect(overlaps).toEqual([])
 
-    await page.locator('#memory-cleaner').scrollIntoViewIfNeeded()
+    await page.locator('#start').scrollIntoViewIfNeeded()
     await expect(flyer).toBeVisible()
     const box = (await flyer.boundingBox())!
     const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.flyer') ?? null, [box.x + box.width / 2, box.y + box.height / 2])
@@ -150,7 +150,7 @@ test.describe('wide screens', () => {
 
     // Primary actions still work with the flyer hovering over the hero.
     await page.locator('#top').scrollIntoViewIfNeeded()
-    await page.getByRole('link', { name: 'Clean payment traces. Free' }).click()
-    await expect(page).toHaveURL(/#memory-cleaner$/)
+    await page.getByRole('link', { name: 'Start local discovery. Free' }).click()
+    await expect(page).toHaveURL(/#start$/)
   })
 })
