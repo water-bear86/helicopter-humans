@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { redact } from './redact'
+import { redact, RULES } from './redact'
 
 describe('redact', () => {
   it('redacts common secrets and identifiers', () => {
@@ -64,6 +64,71 @@ describe('redact', () => {
     const result = redact('Ada Lovelace met Ada at project[a]. Ada Lovelace', undefined, ['Ada', 'Ada Lovelace', 'project[a]', 'CUSTOM'])
     expect(result.text).toBe('[CUSTOM] met [CUSTOM] at [CUSTOM]. [CUSTOM]')
     expect(result.counts.CUSTOM).toBe(4)
+  })
+
+  it.each([
+    ['sk-proj-abcdefghijklmnop1234', ['proj'], '[API_KEY]', { API_KEY: 1 }],
+    ['sk-proj-abcdefghijklmnop1234567890', ['mnop'], '[API_KEY]', { API_KEY: 1 }],
+    ['ghp_abcdefghijklmnopqrstuvwxyz0123', ['ghp'], '[API_KEY]', { API_KEY: 1 }],
+    ['api_key=synthetic-value', ['api_key'], '[CUSTOM]=[SECRET]', { SECRET: 1, CUSTOM: 1 }],
+    ['Authorization: Basic ZGVtbzpwYXNz', ['Authorization'], '[CUSTOM]: [HEADER]', { HEADER: 1, CUSTOM: 1 }],
+    ['-----BEGIN PRIVATE KEY-----\nSYNTHETIC_PRIVATE_MATERIAL\n-----END PRIVATE KEY-----', ['PRIVATE KEY'], '[PRIVATE_KEY_BLOCK]', { PRIVATE_KEY_BLOCK: 1 }],
+    ['https://alice:synthetic-pass@localhost/', ['https'], '[CUSTOM]://[URL_CREDENTIAL]@localhost/', { URL_CREDENTIAL: 1, CUSTOM: 1 }],
+  ])('masks the entire detected credential when a literal overlaps %s', (input, literals, expected, counts) => {
+    const result = redact(input, undefined, literals)
+    expect(result.text).toBe(expected)
+    expect(result.counts).toEqual(counts)
+    expect(result.total).toBe(Object.values(counts).reduce((sum, count) => sum + count, 0))
+  })
+
+  it('combines overlapping credential ranges without retaining a quoted token body', () => {
+    expect(redact('{"token":"sk-proj-abcdefghijklmnop1234"}', undefined, ['token', 'proj']).text).toBe('{"[CUSTOM]":"[API_KEY]"}')
+  })
+
+  it('still masks a whole custom phrase spanning an automatic match', () => {
+    const result = redact('Private project ada@example.com approved', undefined, ['Private project ada@example.com'])
+    expect(result).toEqual({ text: '[CUSTOM] approved', counts: { EMAIL: 1, CUSTOM: 1 }, total: 2 })
+  })
+
+  it('merges phrases made to overlap by multiple automatic replacements', () => {
+    const result = redact('before a@b.co middle c@d.io after', undefined, ['before a@', 'co middle c@', 'io after'])
+    expect(result).toEqual({ text: '[CUSTOM]', counts: { EMAIL: 2, CUSTOM: 1 }, total: 3 })
+  })
+
+  it('matches literals only in source text, preserving case, deduplication and generated markers', () => {
+    const result = redact('Ada ada Ada sk-proj-abcdefghijklmnop1234 password=q /Users/Ada/project', undefined, ['Ada', 'Ada', '', 'API_KEY', 'SECRET', 'USER'])
+    expect(result.text).toBe('[CUSTOM] ada [CUSTOM] [API_KEY] password=[SECRET] /Users/[USER]/project')
+    expect(result.counts).toEqual({ CUSTOM: 2, API_KEY: 1, SECRET: 1, HOME_PATH: 1 })
+    expect(result.total).toBe(5)
+  })
+
+  it('preserves literal-only redaction and rule acceptance checks', () => {
+    expect(redact('sk-proj-abcdefghijklmnop1234', [], ['proj']).text).toBe('sk-[CUSTOM]-abcdefghijklmnop1234')
+    expect(redact('1234567890123', undefined, ['123']).text).toBe('[CUSTOM]4567890[CUSTOM]')
+  })
+
+  it('masks literal source text retained inside an optional replacement callback', () => {
+    const result = redact('BEGIN private-project END', [{
+      label: 'WRAPPER', pattern: /BEGIN (.*?) END/g, replace: (_match, middle) => `[${middle}]`,
+    }], ['private-project'])
+    expect(result).toEqual({ text: '[[CUSTOM]]', counts: { WRAPPER: 1, CUSTOM: 1 }, total: 2 })
+  })
+
+  it('passes masked captures to optional callbacks that transform or truncate them', () => {
+    const rule = { label: 'WRAPPER', pattern: /BEGIN (.*?) END/g, replace: (_match: string, middle: string) => middle.toUpperCase().slice(0, 7) }
+    expect(redact('BEGIN private-project END', [rule], ['private-project']).text).toBe('[CUSTOM')
+  })
+
+  it('keeps credential coverage when optional callbacks precede cloned native rules', () => {
+    const wrapper = { label: 'WRAPPER', pattern: /^(.*)$/g, replace: (_match: string, value: string) => `[${value}]` }
+    const rules = [wrapper, ...RULES.map(rule => ({ ...rule, pattern: new RegExp(rule.pattern.source, rule.pattern.flags) }))]
+    expect(redact('sk-proj-abcdefghijklmnop1234', rules, ['proj']).text).toBe('[[API_KEY]]')
+    expect(redact('/Users/Ada/project', rules, ['Ada']).counts.HOME_PATH).toBe(1)
+  })
+
+  it('still applies native rules to credential values created by optional callbacks', () => {
+    const rules = [{ label: 'EXPAND', pattern: /invented-key/g, replace: () => 'sk-proj-abcdefghijklmnop1234' }, ...RULES]
+    expect(redact('invented-key private-project', rules, ['private-project']).text).toBe('[API_KEY] [CUSTOM]')
   })
 
   it('leaves unlisted private prose visible rather than calling it protected', () => {
