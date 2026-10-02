@@ -1,0 +1,79 @@
+name: z402-regtest
+x-node: &node
+  ZINDER_NETWORK__NAME: zcash-regtest
+  ZINDER_NODE__JSON_RPC_ADDR: http://zebra:18232
+  ZINDER_NODE__AUTH__METHOD: none
+  ZINDER_SECURITY__ALLOW_PUBLIC_BIND: 'true'
+volumes:
+  config:
+    external: true
+    name: z402-regtest-config
+  chain:
+    name: z402-regtest-chain-v1
+  index:
+    name: z402-regtest-index-v1
+services:
+  zebra:
+    image: zfnd/zebra:6.2.3@sha256:bb2a6029db277ee3a10e951dcc0ddd36b4cbcbe0fad684746d695ee21d53fde2
+    restart: on-failure
+    environment:
+      ZEBRA_NETWORK__NETWORK: Regtest
+      ZEBRA_RPC__LISTEN_ADDR: 0.0.0.0:18232
+      ZEBRA_RPC__ENABLE_COOKIE_AUTH: 'false'
+      ZEBRA_MINING__MINER_ADDRESS: ${Z402_MINER_ADDRESS:-tmSRd1r8gs77Ja67Fw1JcdoXytxsyrLTPJm}
+      ZEBRA_STATE__CACHE_DIR: /home/zebra/.cache/zebra
+    ports: ['127.0.0.1:29232:18232']
+    volumes: ['chain:/home/zebra/.cache/zebra', 'config:/home/zebra/.config:ro']
+  init:
+    image: zfnd/zebra:6.2.3@sha256:bb2a6029db277ee3a10e951dcc0ddd36b4cbcbe0fad684746d695ee21d53fde2
+    network_mode: none
+    user: '0:0'
+    entrypoint: /bin/sh
+    command: ['-c', 'mkdir -p /var/lib/zinder/checkpoints /var/lib/zinder/projector/canonical-secondary /var/lib/zinder/query/canonical-secondary /var/lib/zinder/query/wallet-secondary && chown -R 1000:1000 /var/lib/zinder']
+    volumes: ['index:/var/lib/zinder']
+  ingest:
+    image: ghcr.io/gustavovalverde/zinder-ingest:v0.5.0-rc.8@sha256:589961a9aa9d07cf9f50d1747e7acab8582d37fb86fc72b39cfc9587f60e0498
+    restart: on-failure
+    command: ['--config', '/etc/zinder/ingest.toml']
+    volumes: ['index:/var/lib/zinder', 'config:/etc/zinder:ro', 'config:/var/run/zinder-control:ro', 'config:/var/run/zinder-checkpoint:ro']
+    environment:
+      <<: *node
+      ZINDER_NODE__INDEXER_GRPC_ADDR: ''
+      ZINDER_OPS__LISTEN_ADDR: '0.0.0.0:9105'
+    ports: ['127.0.0.1:29102:9102', '127.0.0.1:29105:9105', '127.0.0.1:29110:9110', '127.0.0.1:29106:9106']
+    depends_on:
+      init: {condition: service_completed_successfully}
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:9105/readyz']
+      interval: 2s
+      timeout: 3s
+      retries: 60
+  projector:
+    image: ghcr.io/gustavovalverde/zinder-projector:v0.5.0-rc.8@sha256:7260b485813781d170ead1b492938b2de40e787360798ce8bd9fec9e70eb9d8e
+    restart: on-failure
+    command: ['--config', '/etc/zinder/projector.toml']
+    network_mode: service:ingest
+    volumes: ['index:/var/lib/zinder', 'config:/etc/zinder:ro', 'config:/var/run/zinder-control:ro', 'config:/var/run/zinder-checkpoint:ro']
+    environment:
+      <<: *node
+      ZINDER_PROJECTOR__BUILD_OWNER_HEX: '000000000000000000000000000000c4'
+      ZINDER_OPS__LISTEN_ADDR: '0.0.0.0:9110'
+    depends_on:
+      ingest: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:9110/readyz']
+      interval: 2s
+      timeout: 3s
+      retries: 60
+  query:
+    image: ghcr.io/gustavovalverde/zinder-query:v0.5.0-rc.8@sha256:e5cc65e20eae643a1daa030b5cf833a1b5d8925069217c308e3959679c1d4abe
+    restart: on-failure
+    command: ['--config', '/etc/zinder/query.toml']
+    network_mode: service:ingest
+    volumes: ['index:/var/lib/zinder', 'config:/etc/zinder:ro', 'config:/var/run/zinder-control:ro']
+    environment:
+      <<: *node
+      ZINDER_QUERY__LISTEN_ADDR: '0.0.0.0:9102'
+      ZINDER_OPS__LISTEN_ADDR: '0.0.0.0:9106'
+    depends_on:
+      projector: {condition: service_healthy}

@@ -1,0 +1,32 @@
+name: z402 private payment checks
+on:
+  pull_request:
+    paths: ['packages/z402/**', 'tools/z402-wallet/**', 'examples/z402/**', 'scripts/z402-*.mjs', '.github/workflows/z402.yml']
+  push:
+    branches: [main]
+    paths: ['packages/z402/**', 'tools/z402-wallet/**', 'examples/z402/**', 'scripts/z402-*.mjs', '.github/workflows/z402.yml']
+permissions:
+  contents: read
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --manifest-path tools/z402-wallet/Cargo.toml --check
+      - run: cargo clippy --locked --manifest-path tools/z402-wallet/Cargo.toml -- -D warnings
+      - run: cargo test --locked --manifest-path tools/z402-wallet/Cargo.toml
+  # Settlement is deliberately a separate operator-run gate, with actual local
+  # mining and wallet initialization. Fake protocol tests cannot satisfy it.

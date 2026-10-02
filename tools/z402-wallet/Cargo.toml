@@ -1,0 +1,29 @@
+[package]
+name = "z402-wallet"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+ed25519-dalek = { version = "2", features = ["pkcs8"] }
+hex = "0.4"
+fs2 = "0.4"
+pczt = { version = "=0.9.1", features = ["orchard", "sapling", "transparent"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+zcash_keys = "=0.16.0"
+zcash_protocol = { version = "=0.10.1", features = ["local-consensus"] }
+zcash_proofs = { version = "=0.30.0", features = ["download-params"] }
+zally-wallet = { git = "https://github.com/gustavovalverde/zally", rev = "4eaa0bbaf562d7cfb0629618b30db50200dedfef", features = ["zinder"] }
+zally-core = { git = "https://github.com/gustavovalverde/zally", rev = "4eaa0bbaf562d7cfb0629618b30db50200dedfef" }
+zally-chain = { git = "https://github.com/gustavovalverde/zally", rev = "4eaa0bbaf562d7cfb0629618b30db50200dedfef", features = ["zinder"] }
+zally-keys = { git = "https://github.com/gustavovalverde/zally", rev = "4eaa0bbaf562d7cfb0629618b30db50200dedfef" }
+zally-storage = { git = "https://github.com/gustavovalverde/zally", rev = "4eaa0bbaf562d7cfb0629618b30db50200dedfef" }
+zally-pczt = { git = "https://github.com/gustavovalverde/zally", rev = "4eaa0bbaf562d7cfb0629618b30db50200dedfef" }
+zcash-payment-disclosure = { git = "https://github.com/gustavovalverde/zally", rev = "4eaa0bbaf562d7cfb0629618b30db50200dedfef" }

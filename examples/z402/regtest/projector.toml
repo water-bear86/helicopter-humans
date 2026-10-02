@@ -1,0 +1,24 @@
+[network]
+name = "zcash-regtest"
+[node]
+json_rpc_addr = "http://zebra:18232"
+request_timeout_secs = 30
+[node.auth]
+method = "none"
+[storage]
+canonical_path = "/var/lib/zinder/canonical"
+canonical_secondary_path = "/var/lib/zinder/projector/canonical-secondary"
+[wallet]
+path = "/var/lib/zinder/wallet"
+[projector]
+reorg_window_blocks = 1000
+lease_duration_seconds = 14400
+[ingest_control]
+addr = "http://127.0.0.1:9100"
+bearer_token_path = "/var/run/zinder-control/ingest.token"
+[projector_control]
+listen_addr = "127.0.0.1:9101"
+bearer_token_path = "/var/run/zinder-checkpoint/checkpoint.token"
+checkpoint_staging_root = "/var/lib/zinder/checkpoints"
+[ops]
+listen_addr = "127.0.0.1:9110"

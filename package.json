@@ -19,7 +19,9 @@
     "smoke:functions": "node scripts/smoke-functions.mjs",
     "tools:build": "vite build --config vite.tools.config.ts --logLevel warn",
     "relay": "npm run tools:build && node .tools-build/relay.js",
-    "sandbox": "npm run tools:build && node --env-file-if-exists=.env.sandbox .tools-build/sandbox-preflight.js"
+    "sandbox": "npm run tools:build && node --env-file-if-exists=.env.sandbox .tools-build/sandbox-preflight.js",
+    "z402:regtest": "node scripts/z402-regtest.mjs",
+    "test:z402:live": "node scripts/z402-e2e.mjs"
   },
   "repository": {
     "type": "git",
