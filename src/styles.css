@@ -92,7 +92,38 @@ a {
   top: 1rem;
 }
 
-/* ---- Top bar ---- */
+/* ---- Address banner and top bar ---- */
+
+.address-banner {
+  padding: 0.7rem 1rem;
+  background: var(--night);
+  color: var(--acid);
+  border-bottom: var(--border);
+  text-align: center;
+}
+
+.address-banner-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.address-banner code {
+  max-width: 100%;
+  padding: 0;
+  background: transparent;
+  font-size: clamp(0.7rem, 2.9vw, 0.9rem);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.address-banner .btn {
+  padding: 0.35rem 0.6rem;
+  box-shadow: none;
+  font-size: 0.7rem;
+}
 
 .topbar {
   display: flex;
