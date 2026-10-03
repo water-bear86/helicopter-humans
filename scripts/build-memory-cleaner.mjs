@@ -5,6 +5,9 @@ const files = {
   'memory-cleaner.py': 'tools/memory-cleaner/memory_cleaner.py',
   'memory-cleaner-guide.txt': 'docs/PAYMENT_TRACE_CLEANER.md',
   'z402-design.txt': 'docs/Z402_DESIGN.md',
+  // The corrected privacy claim travels with the design proposal. Publishing one
+  // without the other leaves the site asserting a framing that does not hold.
+  'z402-thesis-corrections.txt': 'docs/Z402_THESIS_CORRECTIONS.md',
 }
 const checksums = {}
 for (const [name, source] of Object.entries(files)) {

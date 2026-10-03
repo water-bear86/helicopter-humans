@@ -100,6 +100,8 @@ Do not enable the Founding Pass merely by adding a link: price, payout account, 
 
 `docs/CHECKOUT.md` covers the CipherPay invoice checkout: order binding, states, the PostgreSQL store and migrations, secure configuration, readiness blockers and limitations. `docs/PAYMENT_ADAPTER.md` covers the earlier txid/x402 path, which stays disabled and is not the checkout.
 
+For z402, start with [`docs/Z402_THESIS_CORRECTIONS.md`](docs/Z402_THESIS_CORRECTIONS.md). It sets out the privacy claim this project can actually defend — a shielded transaction is visible, its participants are not — and the phrasing to avoid. Read it before `docs/Z402_DESIGN.md`, which is a proposal, and before the runbook, which covers an experimental local slice. [`docs/Z402_MVP_PRD.md`](docs/Z402_MVP_PRD.md) is the current sprint scope.
+
 ## Run a private agent purchase locally
 
 Docker, Node 24+, and Rust are required. The macOS bootstrap starts an isolated
