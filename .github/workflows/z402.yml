@@ -1,10 +1,22 @@
 name: z402 private payment checks
 on:
   pull_request:
-    paths: ['packages/z402/**', 'tools/z402-wallet/**', 'examples/z402/**', 'scripts/z402-*.mjs', '.github/workflows/z402.yml']
+    paths:
+      - 'packages/z402/**'
+      - 'tools/z402-wallet/**'
+      - 'examples/z402/**'
+      - 'scripts/z402-*.mjs'
+      - 'docs/Z402_*.md'
+      - '.github/workflows/z402.yml'
   push:
     branches: [main]
-    paths: ['packages/z402/**', 'tools/z402-wallet/**', 'examples/z402/**', 'scripts/z402-*.mjs', '.github/workflows/z402.yml']
+    paths:
+      - 'packages/z402/**'
+      - 'tools/z402-wallet/**'
+      - 'examples/z402/**'
+      - 'scripts/z402-*.mjs'
+      - 'docs/Z402_*.md'
+      - '.github/workflows/z402.yml'
 permissions:
   contents: read
 jobs:
