@@ -5,6 +5,12 @@
 > offers, durable local budgets, selected-output disclosures, encrypted delivery,
 > and independently verifiable merchant receipts. See [the runbook](Z402_RUNBOOK.md).
 > The credit ledger and rollup below remain proposals; hosted collection stays off.
+>
+> **Read [Z402_THESIS_CORRECTIONS.md](Z402_THESIS_CORRECTIONS.md) first.** It
+> replaces an earlier internal framing — "wrap any payment in zero knowledge, send
+> it over ZEC, it unwraps on arrival with no paper trail" — that does not hold. There
+> is no unwrap step: a shielded receive is itself a public transaction. Item 2 below
+> is superseded where it asks for a new circuit.
 
 
 Angus's direction is a free discovery/removal tool now, followed by an x402-compatible transport/payment system that prevents payments from being linked to an agent by default. This document turns that direction into testable requirements. It is a proposal, not a working protocol, security proof or launch-readiness claim. The existing local relay, disabled checkout and verify-only ZEC adapter do not implement it.
@@ -32,7 +38,15 @@ flowchart LR
 This is a candidate separation of roles, not an assertion that the shown arrows constitute a secure protocol. The envelope, key management, relay independence and response routing need specification and review. A single relay with plaintext requests and stable client tokens does not satisfy the ingress/egress separation.
 
 1. **Shielded funding/credit.** Choose one supported asset/network and a reviewed note/commitment construction. A user holds spendable notes locally rather than a gateway account keyed by their agent identity. Funding, change and withdrawal patterns must be included in the anonymity analysis; matching deposit and service amounts or immediate spending can defeat the intended unlinkability. Do not invent a new cryptographic primitive.
-2. **Prove authorized spend.** Define a circuit that proves ownership of an eligible unspent note, value conservation including every fee, valid change commitments and authorization of a specific payment intent. Candidate public inputs include a commitment root, domain-separated nullifier, canonical intent commitment, expiry and output commitments. The witness contains note secrets, membership path and private values. No funding wallet address or stable agent identifier belongs in the ordinary proof payload. Revealed input/output values and repeated proof fields require explicit linkability analysis. Do not claim zero knowledge until an actual reviewed proof system/verifier exists.
+2. **Prove authorized spend.** ~~Define a circuit that proves ownership of an eligible unspent note, value conservation including every fee, valid change commitments and authorization of a specific payment intent.~~ **Superseded — do not write a new circuit.** A zero-knowledge proof proves one statement and publishes no unwrapped value; there is no wrapper to unwrap on arrival. Use the existing reviewed Orchard construction at the pinned version rather than authoring a scheme: see the `orchard` pin and the bundle/circuit version requirements in [Z402_RUNBOOK.md](Z402_RUNBOOK.md) and the reasoning in [Z402_THESIS_CORRECTIONS.md](Z402_THESIS_CORRECTIONS.md). Required properties for whatever construction is used:
+
+   - Note ownership and membership, with caller-supplied roots accepted only from the intended validated chain.
+   - Value conservation including every fee, and valid change commitments.
+   - Domain-separated nullifiers, so proofs for two different payments cannot be linked to each other.
+   - Canonical binding of the payment intent (see item 3).
+   - Explicit linkability analysis of any revealed value or repeated proof field.
+
+   No funding wallet address or stable agent identifier belongs in the ordinary proof payload. Do not claim zero knowledge until an actual reviewed proof system and verifier exist.
 3. **Bind the request.** The canonical intent must bind chain, asset, recipient, amount/cap, fee cap, authenticated merchant offer, method/resource, expiry and a request-specific nonce. Specify encoding and domain separation. A proof for one merchant/resource cannot authorize a different one. Authenticate the offer end-to-end; a gateway must not be able to replace a quoted recipient or price.
 4. **Prevent double spending atomically.** Verify proofs, reserve nullifiers and authorize settlement with durable transactional state. Specify retries, concurrent requests, chain reorgs, expiry, crash recovery and refunds. Settlement must not succeed twice, and a failed request must not silently lose credit. The existing relay's proposed usage-credit hook is not this anonymous ledger.
 5. **Separate identity from transport.** Use independently operated ingress/egress or a reviewed anonymity transport so the party seeing the agent's network source does not also receive the merchant/settlement intent. Normalize headers, avoid stable trace IDs/accounts, pad packet sizes, and define bounded batching/delay policies. Timing, destination/content and amount correlation are measurements to test, not problems a SNARK automatically solves.

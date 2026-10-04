@@ -26,8 +26,10 @@ test('navigation resolves to current content and retired offers are absent', asy
 })
 
 test('availability separates the free cleaner from the z402 design', async ({ page }) => {
-  await expect(page.locator('.pill-live')).toHaveText(/Free\s+Payment-trace cleaner/)
-  await expect(page.locator('.pill-off')).toHaveText(/Design stage\s+z402 payment privacy/)
+  // Assert the intent — cleaner is live/free, z402 is design-stage — without pinning
+  // the product name, which changed when expose402 replaced the unnamed cleaner.
+  await expect(page.locator('.pill-live')).toHaveText(/^Free\s+.*trace cleaner$/)
+  await expect(page.locator('.pill-off')).toHaveText(/^Design stage\s+z402 payment privacy$/)
   await page.getByRole('link', { name: 'Next flight: z402' }).click()
   await expect(page).toHaveURL(/#z402$/)
   await expect(page.locator('#z402')).toContainText('A protected payment route is still to be built')

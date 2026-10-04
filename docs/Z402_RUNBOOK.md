@@ -10,6 +10,11 @@ into a shielded merchant. The scheme is `z402-shielded-v1`; interoperable regist
 and a cryptographic audit remain outstanding. No hosted payment verifier, merchant
 account, API key, token, or full viewing key is sent to a facilitator.
 
+## Dependency and version pins
+
+These are security conditions, not preferences. Upgrading any of them is a
+deliberate change that requires rerunning the live evidence.
+
 The native companion pins [Zally](https://github.com/gustavovalverde/zally) at
 `4eaa0bbaf562d7cfb0629618b30db50200dedfef` and its Zinder SDK at
 `71f49e5ebb260287647c6894d5a718c28d82d4c1`. These are experimental upstreams.
@@ -17,6 +22,19 @@ The Ironwood disclosure is a Zally profile, not finalized ZIP 311. Node control-
 tests use an explicitly fake native bridge; they do not demonstrate settlement.
 The separately gated live test requires an actual wallet, local node, mined payment,
 and native verification.
+
+| Pin | Current | Rule |
+| --- | --- | --- |
+| `orchard` | 0.15.4 in `Cargo.lock` | A July 2026 advisory documents an under-constrained Orchard gadget permitting invalid spends and counterfeiting; the fix requires `halo2_gadgets >= 0.5.0` and `orchard >= 0.14.0`. Never resolve below the fixed version. Re-verify the checksum and non-yanked status on each bump. |
+| Bundle version | `ironwood_v3()` | Use the current pool for any local slice. |
+| Circuit version | `PostNu6_3` | Required for the post-NU6.3 restrictions. **Refuse `InsecurePreNu6_2` explicitly** — it is a historical circuit API still exposed by the crate and must never be selected by a config default. |
+| Zally / Zinder | git rev, see above | The crate does not choose activation heights or consensus branches for the application. Do not change the activation schedule without updating the companion and rerunning native evidence. |
+
+`orchard` is `MIT OR Apache-2.0`. Choose a license for this repository and preserve
+the required notices for the Rust dependency tree; the transitive license inventory
+is still outstanding. Note that Zellic's July 2026 Ironwood assessment covered source
+commit `30c4ea27`, which is **not** the commit resolved in this lockfile — treat it
+as review evidence for the construction, not as certification of this build.
 
 Mainnet is rejected. Testnet is accepted as a configuration value but has not passed
 the live acceptance gate; it requires compatible network activation and funded
