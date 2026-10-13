@@ -5,6 +5,30 @@ import { pathToFileURL } from 'node:url'
 
 const offline = pathToFileURL(resolve('dist/offline-redactor.html')).href
 
+test('overlapping custom phrases cannot expose credentials in the preview, copy or saved file', async ({ page }) => {
+  await page.goto(offline)
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: {
+      writeText: async (text: string) => { document.documentElement.setAttribute('data-copied', text) },
+    } })
+  })
+  await page.locator('#source').fill('sk-proj-abcdefghijklmnop1234\nsk-proj-abcdefghijklmnop1234567890\nPrivate project ada@example.com\nretry at 09:00')
+  await page.locator('#terms').fill('proj\nmnop\nPrivate project ada@example.com\nAPI_KEY')
+  await page.locator('#prepare').click()
+  const expected = '[API_KEY]\n[API_KEY]\n[CUSTOM]\nretry at 09:00'
+  await expect(page.locator('#output')).toHaveValue(expected)
+  await expect(page.locator('#status')).toContainText('4 matches replaced')
+  await expect(page.locator('#copy')).toBeDisabled()
+  await expect(page.locator('#save')).toBeDisabled()
+  await page.locator('#reviewed').check()
+  await page.locator('#copy').click()
+  await expect(page.locator('html')).toHaveAttribute('data-copied', expected)
+  const downloadEvent = page.waitForEvent('download')
+  await page.locator('#save').click()
+  const download = await downloadEvent
+  expect(await readFile((await download.path())!, 'utf8')).toBe(expected)
+})
+
 test('offline file masks custom/private text, requires review and exports only the preview', async ({ page }, testInfo) => {
   const requests: string[] = []
   const errors: string[] = []

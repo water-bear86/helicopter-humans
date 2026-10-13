@@ -1,0 +1,30 @@
+name: Offline redactor checks
+on:
+  pull_request:
+    paths:
+      - 'src/redact*'
+      - 'src/offline.ts'
+      - 'src/terminal*'
+      - 'offline/**'
+      - 'e2e/offline.spec.ts'
+      - 'scripts/build-offline.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.ts'
+      - '.github/workflows/offline-redactor.yml'
+permissions:
+  contents: read
+jobs:
+  redactor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npx --no-install playwright install --with-deps chromium
+      - run: npm run test:e2e -- e2e/offline.spec.ts
